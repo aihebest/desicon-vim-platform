@@ -1,0 +1,25 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,tf,tfvars,hcl,razor,css,csproj,props}]
+indent_size = 2
+
+[*.cs]
+csharp_style_namespace_declarations = file_scoped:warning
+dotnet_sort_system_directives_first = true
+csharp_prefer_braces = true:warning
+dotnet_style_readonly_field = true:warning
+# Collections are exposed read-only from aggregates; CA1002/CA2227 stay on.
+dotnet_diagnostic.CA1062.severity = none
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1303.severity = none
+dotnet_diagnostic.CA1711.severity = none
+# Log arguments here are cheap strings; structured logging templates are still used.
+dotnet_diagnostic.CA1873.severity = none

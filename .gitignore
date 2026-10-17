@@ -1,0 +1,21 @@
+bin/
+obj/
+.vs/
+.vscode/*
+!.vscode/extensions.json
+*.user
+TestResults/
+coverage/
+*.swp
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.auto.tfvars
+!example.auto.tfvars.example
+backend.hcl
+# Local secrets — never commit
+appsettings.Development.local.json
+local.settings.json
+.env
