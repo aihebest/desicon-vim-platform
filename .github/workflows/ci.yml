@@ -84,7 +84,7 @@ jobs:
         run: |
           set -o pipefail
           dotnet restore Desicon.Vim.sln 2>&1 | tee restore.log || {
-            grep -E "(error|warning) [A-Z]+[0-9]+" restore.log | sed -E 's|^.*/desicon-vim-platform/||' | sort -u | head -60 | sed 's/^/::error::/'
+            grep -E "(error|warning) [A-Z]+[0-9]+" restore.log | sed 's|/home/runner/work/desicon-vim-platform/desicon-vim-platform/||g' | sort -u | head -60 | sed 's/^/::error::/'
             exit 1
           }
 
@@ -95,7 +95,7 @@ jobs:
         run: |
           set -o pipefail
           dotnet build Desicon.Vim.sln -c Release --no-restore -warnaserror 2>&1 | tee build.log || {
-            grep -E "error [A-Z]+[0-9]+" build.log | sed -E 's|^.*/desicon-vim-platform/||' | sort -u | head -60 | sed 's/^/::error::/'
+            grep -E "error [A-Z]+[0-9]+" build.log | sed 's|/home/runner/work/desicon-vim-platform/desicon-vim-platform/||g' | sort -u | head -60 | sed 's/^/::error::/'
             exit 1
           }
 
