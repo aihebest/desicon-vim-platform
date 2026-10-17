@@ -77,13 +77,27 @@ jobs:
         with:
           dotnet-version: "10.0.x"
 
+      # Each step below re-emits compiler errors as GitHub annotations, so they
+      # show on the pull request's "Files changed" tab and in the run summary.
       - name: Restore
-        run: dotnet restore Desicon.Vim.sln
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet restore Desicon.Vim.sln 2>&1 | tee restore.log || {
+            grep -E "(error|warning) [A-Z]+[0-9]+" restore.log | sed -E 's|^.*/desicon-vim-platform/||' | sort -u | head -60 | sed 's/^/::error::/'
+            exit 1
+          }
 
       # TreatWarningsAsErrors is already true in Directory.Build.props; it is
       # repeated here so CI cannot be loosened by editing that file alone.
       - name: Build (Release, warnings as errors)
-        run: dotnet build Desicon.Vim.sln -c Release --no-restore -warnaserror
+        shell: bash
+        run: |
+          set -o pipefail
+          dotnet build Desicon.Vim.sln -c Release --no-restore -warnaserror 2>&1 | tee build.log || {
+            grep -E "error [A-Z]+[0-9]+" build.log | sed -E 's|^.*/desicon-vim-platform/||' | sort -u | head -60 | sed 's/^/::error::/'
+            exit 1
+          }
 
       - name: Test with coverage
         run: >
