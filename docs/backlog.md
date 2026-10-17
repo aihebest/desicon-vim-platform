@@ -2,9 +2,10 @@
 
 ## To finish Phase 1 (before UAT)
 
-- [ ] First build on a developer machine; fix compile issues in Infrastructure, Functions and `Program.cs`
+- [x] First real build with NuGet packages (CI): all projects compile, tests pass
 - [ ] Generate the initial EF Core migration and a migration bundle (`docs/operations/database.md`)
-- [ ] `terraform validate` / `tflint` for each environment; deploy **dev**
+- [x] `terraform validate` / `tflint` for each environment (CI)
+- [ ] Deploy **dev**
 - [ ] SHA-pin all GitHub Actions (`npx ratchet pin .github/workflows/*.yml`)
 - [ ] Create the Entra app registration and app roles; assign test users per role
 - [ ] Grant the Functions identity access to the invoice mailbox only (`infra/scripts/grant-mailbox-access.ps1`)

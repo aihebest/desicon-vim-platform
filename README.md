@@ -63,20 +63,23 @@ To run the workbench locally against Docker SQL Server and Azurite, see
 Database setup and migrations: [docs/operations/database.md](docs/operations/database.md).
 Azure deployment: [docs/operations/infrastructure.md](docs/operations/infrastructure.md).
 
-## Verification status of this first drop
+## Verification status
 
-This code was written in an environment without access to NuGet, so only part of it
-could be compiled there. **Run `dotnet build` and `dotnet test` on your machine first.**
+Every pull request runs the CI pipeline in `.github/workflows/ci.yml`. As of the Phase 1 pull request:
 
-| Part | Status |
+| Check | Status |
 |---|---|
-| Domain | Compiled with warnings as errors; **45 tests pass** |
-| Application | Compiled with warnings as errors; **21 tests pass** |
-| Blazor workbench pages | Compiled with warnings as errors inside a local harness; screens rendered and checked |
-| Infrastructure, Functions | Compiled only against hand-written stand-ins for the Azure/EF/Graph packages — **not yet built with the real packages**; expect a few fixes on first build |
-| `Program.cs` (Entra sign-in wiring) | **Not yet compiled** |
-| Terraform | Formatted, tflint, checkov (71 passed) and policy tests pass; **`terraform validate`/`plan` not yet run** (needs registry access) |
-| EF Core migrations | Not generated yet — see `docs/operations/database.md` |
+| Restore with real NuGet packages, no known-vulnerable dependencies | Passing |
+| Build of all projects, warnings as errors | Passing |
+| Unit tests (xUnit): domain and application | Passing |
+| `dotnet format` | Passing |
+| Terraform fmt, validate (dev/uat/prod), tflint, OPA policy tests | Passing |
+| Checkov infrastructure scan | Passing |
+| Gitleaks secret scan (full history) | Passing |
+| CodeQL and dependency review | Skipped: need GitHub Code Security on a private repo |
+
+Not yet exercised: running against a real Azure SQL database, Graph mailbox, Document
+Intelligence and Business Central (first deployment to **dev**), and EF Core migrations.
 
 ## Contributing rules
 
