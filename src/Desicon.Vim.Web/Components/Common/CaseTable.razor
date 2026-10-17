@@ -1,0 +1,40 @@
+@if (Items.Count == 0)
+{
+    <p class="muted">@EmptyText</p>
+}
+else
+{
+    <table class="grid">
+        <thead>
+            <tr>
+                <th>Reference</th><th>Status</th><th>Vendor</th><th>Invoice</th><th class="num">Amount</th>
+                <th>Category</th><th>Reviewer</th><th>Due</th><th>Flags</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var c in Items)
+            {
+                var overdue = c.DueAtUtc is { } d && d < DateTimeOffset.UtcNow;
+                <tr>
+                    <td><a href="cases/@c.Id">@c.Reference</a></td>
+                    <td><StatusBadge Status="c.Status" /></td>
+                    <td>@(c.VendorName ?? c.SenderEmail)</td>
+                    <td>@c.InvoiceNumber</td>
+                    <td class="num">@Format.Money(c.Amount, c.Currency)</td>
+                    <td>@c.CategoryCode</td>
+                    <td>@c.AssignedReviewerName</td>
+                    <td class="@(overdue ? "overdue" : "")">@Format.Wat(c.DueAtUtc)</td>
+                    <td>
+                        @if (c.HasBlockingFlag) { <span class="flag flag-block" title="Blocking flag open">@c.OpenFlagCount</span> }
+                        else if (c.OpenFlagCount > 0) { <span class="flag" title="Open flags">@c.OpenFlagCount</span> }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<CaseSummary> Items { get; set; } = [];
+    [Parameter] public string EmptyText { get; set; } = "Nothing here.";
+}

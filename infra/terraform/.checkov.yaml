@@ -1,0 +1,52 @@
+# Checkov configuration for infra/terraform (used by the iac-scan CI job).
+#
+# Every skip below is a decision, not a silence. Each says why. Checkov scans
+# the source with module defaults and the dev root's values, so several
+# network checks fail for dev -- where public endpoints with Entra-only auth
+# are the deliberate design -- even though prod sets
+# enable_private_networking = true. The prod network posture is enforced by
+# infra/policy/terraform (deny_public_network_in_prod), which runs against the
+# real plan.
+#
+# Remove a skip as soon as the reason stops being true.
+
+framework:
+  - terraform
+
+skip-check:
+  # -- Environment-dependent network posture (dev public, prod private) -------
+  - CKV_AZURE_113   # SQL public access: dev only; prod private (policy-enforced)
+  - CKV2_AZURE_45   # SQL private endpoint: created by modules/network when enabled
+  - CKV2_AZURE_34   # 0.0.0.0 "Azure services" rule: dev only, Entra-only auth
+  - CKV_AZURE_189   # Key Vault public access: dev only
+  - CKV2_AZURE_32   # Key Vault private endpoint: modules/network when enabled
+  - CKV_AZURE_59    # Storage public network access: dev only
+  - CKV_AZURE_35    # Storage default Allow: dev only (no VNet to restrict to)
+  - CKV2_AZURE_33   # Storage private endpoint: modules/network when enabled
+  - CKV_AZURE_134   # Document Intelligence public access: dev only
+  - CKV_AZURE_222   # Web app public access: the staff workbench must be reachable; Entra sign-in protects it
+  - CKV_AZURE_221   # Function app public access: required for GitHub-hosted deployment to the SCM site; the app exposes no HTTP triggers
+
+  # -- Sizing decided per environment by variables ------------------------------
+  - CKV_AZURE_211   # "Production" plan SKU: dev/uat use B1 to save cost; prod P1v3
+  - CKV_AZURE_212   # Minimum instance count: prod sets worker_count = 2
+  - CKV_AZURE_225   # Zone-redundant plan: optional variable; needs P*v3 + region support
+  - CKV_AZURE_229   # Zone-redundant SQL: optional variable; cost decision for prod
+  - CKV_AZURE_206   # Storage replication: LRS in dev, ZRS in prod; host storage holds only transient leases
+
+  # -- Controls met another way --------------------------------------------------
+  - CKV_AZURE_13    # App Service Authentication (Easy Auth): the app signs users in itself with Microsoft.Identity.Web
+  - CKV_AZURE_17    # Client certificates: staff use browsers with Entra sign-in, not certificates
+  - CKV_AZURE_88    # Azure Files mount: the app keeps no local state; documents go to Blob storage
+  - CKV_AZURE_33    # Classic queue analytics logging needs shared-key data-plane access (disabled); diagnostic settings used instead
+  - CKV2_AZURE_21   # Classic blob analytics logging: same; blob diagnostic setting (allLogs) is configured
+  - CKV_AZURE_24    # Audit retention: audit goes to Log Analytics; retention governed by the workspace
+  - CKV2_AZURE_2    # Classic SQL vulnerability assessment: express VA is enabled instead (no storage account needed)
+  - CKV_AZURE_224   # SQL Ledger: the app's AuditEvents table is append-only by permission (DENY UPDATE/DELETE); ledger is a later decision (it is irreversible)
+
+  # -- Customer-managed keys: deferred ---------------------------------------------
+  # Platform-managed keys (Microsoft-managed AES-256) are used everywhere.
+  # CMK adds key lifecycle operations and an availability dependency on Key
+  # Vault for every read; revisit if a client contract or regulator requires it.
+  - CKV2_AZURE_1    # Storage CMK
+  - CKV2_AZURE_22   # Cognitive Services CMK

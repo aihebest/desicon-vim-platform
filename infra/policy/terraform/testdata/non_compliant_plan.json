@@ -1,0 +1,86 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "variables": {
+    "environment": {
+      "value": "prod"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.storage.azurerm_storage_account.this",
+      "module_address": "module.storage",
+      "type": "azurerm_storage_account",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "allow_nested_items_to_be_public": true,
+          "shared_access_key_enabled": true,
+          "https_traffic_only_enabled": false,
+          "min_tls_version": "TLS1_0",
+          "public_network_access_enabled": true
+        }
+      }
+    },
+    {
+      "address": "module.sql.azurerm_mssql_server.this",
+      "module_address": "module.sql",
+      "type": "azurerm_mssql_server",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "minimum_tls_version": "1.0",
+          "administrator_login": "sqladmin",
+          "public_network_access_enabled": true,
+          "azuread_administrator": []
+        }
+      }
+    },
+    {
+      "address": "module.keyvault.azurerm_key_vault.this",
+      "module_address": "module.keyvault",
+      "type": "azurerm_key_vault",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "purge_protection_enabled": false,
+          "rbac_authorization_enabled": false,
+          "public_network_access_enabled": true
+        }
+      }
+    },
+    {
+      "address": "module.app_hosting.azurerm_linux_web_app.web",
+      "module_address": "module.app_hosting",
+      "type": "azurerm_linux_web_app",
+      "name": "web",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "https_only": false,
+          "site_config": [
+            {
+              "minimum_tls_version": "1.0",
+              "ftps_state": "AllAllowed"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

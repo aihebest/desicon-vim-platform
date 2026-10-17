@@ -1,0 +1,291 @@
+# =============================================================================
+# CI -- Desicon VIM Platform
+#
+# Runs on every pull request and on every push to main. Nothing here touches
+# Azure: no credentials are used or available. Deployment is deploy.yml.
+#
+# Jobs
+#   dotnet            restore, build (warnings = errors), test + coverage, format check
+#   secrets           gitleaks over the FULL git history
+#   codeql            static analysis of the C# code             (*)
+#   dependency-review flags vulnerable/new packages in a PR       (*)
+#   terraform         fmt, validate (all envs), tflint, OPA policy unit tests + canary
+#   iac-scan          checkov over infra/terraform, SARIF upload (*)
+#
+#   (*) Code scanning, SARIF upload and dependency review are free for PUBLIC
+#   repositories. For a PRIVATE repository they need GitHub Code Security
+#   (a paid add-on). Those jobs/steps run only when the repository is public
+#   or the repository variable CODE_SCANNING_ENABLED is 'true', so the rest
+#   of CI still works on a private repo without the add-on.
+#
+# -----------------------------------------------------------------------------
+# !!! ACTION PINNING -- MUST DO BEFORE RELYING ON THIS PIPELINE !!!
+# Every `uses:` below is pinned to a major-version TAG (e.g. @v4). Tags can be
+# moved by whoever controls the action's repository, so a compromised action
+# could change what runs here with access to this repo. Pin each one to a
+# full commit SHA, keeping the tag as a comment, e.g.
+#     uses: actions/checkout@<40-char-sha> # v4
+# These files were written offline, where SHAs cannot be looked up. Run once:
+#     npx ratchet pin .github/workflows/ci.yml .github/workflows/deploy.yml
+# (or `pinact run`), commit the result, and let Dependabot (github-actions
+# ecosystem, .github/dependabot.yml) keep the SHAs current.
+# See docs/operations/infrastructure.md, "Pin GitHub Actions to SHAs".
+# -----------------------------------------------------------------------------
+# =============================================================================
+
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Nothing by default; each job asks for exactly what it needs.
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "true"
+  TF_VERSION: "1.15.9"
+  TFLINT_VERSION: "v0.58.1"
+  CONFTEST_VERSION: "0.71.1"
+  CONFTEST_SHA256: "c3f6b2a753bd56e377a1e51a95ae3e057f926f2e9139f7d5b5dfbbaf810f7985"
+  GITLEAKS_VERSION: "8.30.1"
+  GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  dotnet:
+    name: .NET build, test, format
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      # global.json pins SDK 10.0.100 with rollForward latestFeature, which any
+      # 10.0.x SDK installed here satisfies. (NuGet caching via setup-dotnet
+      # needs packages.lock.json files; add `cache: true` once the projects
+      # set RestorePackagesWithLockFile.)
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Desicon.Vim.sln
+
+      # TreatWarningsAsErrors is already true in Directory.Build.props; it is
+      # repeated here so CI cannot be loosened by editing that file alone.
+      - name: Build (Release, warnings as errors)
+        run: dotnet build Desicon.Vim.sln -c Release --no-restore -warnaserror
+
+      - name: Test with coverage
+        run: >
+          dotnet test Desicon.Vim.sln -c Release --no-build
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+          --logger "trx;LogFilePrefix=test-results"
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Check formatting (dotnet format)
+        run: dotnet format Desicon.Vim.sln --verify-no-changes --no-restore --verbosity minimal
+
+  # ---------------------------------------------------------------------------
+  secrets:
+    name: Secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history: a secret deleted in a later commit is still leaked
+
+      # The gitleaks CLI is used directly (checksum-verified) rather than
+      # gitleaks-action, which needs a paid licence key for organisation-owned
+      # repositories.
+      - name: Install gitleaks
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo mv gitleaks /usr/local/bin/gitleaks
+          rm gitleaks.tar.gz
+          gitleaks version
+
+      - name: Scan git history
+        run: gitleaks git --config .config/gitleaks.toml --redact --verbose --no-banner .
+
+  # ---------------------------------------------------------------------------
+  codeql:
+    name: CodeQL (C#)
+    if: ${{ !github.event.repository.private || vars.CODE_SCANNING_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: csharp
+          build-mode: manual
+          queries: security-and-quality
+
+      - name: Build for CodeQL
+        run: dotnet build Desicon.Vim.sln -c Release
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:csharp"
+
+  # ---------------------------------------------------------------------------
+  dependency-review:
+    name: Dependency review
+    if: ${{ github.event_name == 'pull_request' && (!github.event.repository.private || vars.CODE_SCANNING_ENABLED == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Copyleft licences would oblige Desicon to publish source if the
+          # platform were ever distributed to clients or vendors.
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0
+
+  # ---------------------------------------------------------------------------
+  terraform:
+    name: Terraform fmt, validate, lint, policy tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive -diff infra/terraform
+
+      # init -backend=false downloads providers but never touches remote state,
+      # so no Azure credentials are needed. validate then checks every
+      # resource and attribute against the real provider schema.
+      - name: terraform validate (dev, uat, prod)
+        run: |
+          set -euo pipefail
+          for env in dev uat prod; do
+            echo "::group::validate $env"
+            terraform -chdir=infra/terraform/environments/$env init -backend=false -input=false -no-color
+            terraform -chdir=infra/terraform/environments/$env validate -no-color
+            echo "::endgroup::"
+          done
+
+      - name: Check the three environment main.tf files are identical
+        run: |
+          diff -u infra/terraform/environments/dev/main.tf infra/terraform/environments/uat/main.tf
+          diff -u infra/terraform/environments/dev/main.tf infra/terraform/environments/prod/main.tf
+          diff -u infra/terraform/environments/dev/outputs.tf infra/terraform/environments/uat/outputs.tf
+          diff -u infra/terraform/environments/dev/outputs.tf infra/terraform/environments/prod/outputs.tf
+
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: ${{ env.TFLINT_VERSION }}
+
+      - name: tflint
+        working-directory: infra/terraform
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # avoids GitHub API rate limits when downloading the azurerm ruleset
+        run: |
+          tflint --init --config "$GITHUB_WORKSPACE/.config/tflint.hcl"
+          tflint --recursive --config "$GITHUB_WORKSPACE/.config/tflint.hcl" --format compact
+
+      - name: Install conftest
+        run: |
+          curl -sSfL -o conftest.tar.gz \
+            "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          echo "${CONFTEST_SHA256}  conftest.tar.gz" | sha256sum --check --strict
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          rm conftest.tar.gz
+          conftest --version
+
+      # Testing the policy against a real plan needs Azure credentials, so it
+      # runs in deploy.yml. Here: the policy's own unit tests, plus a canary
+      # proving the gate is alive. A conftest run that silently evaluates zero
+      # rules (wrong --namespace) exits 0 and looks exactly like a clean plan.
+      - name: Policy unit tests (conftest verify)
+        run: conftest verify --policy infra/policy/terraform --no-color
+
+      - name: Policy canary -- compliant plan must pass
+        run: >
+          conftest test --policy infra/policy/terraform --namespace terraform.vim.security --no-color
+          infra/policy/terraform/testdata/compliant_plan.json
+
+      - name: Policy canary -- non-compliant plan must FAIL
+        run: |
+          if conftest test --policy infra/policy/terraform --namespace terraform.vim.security --no-color \
+               infra/policy/terraform/testdata/non_compliant_plan.json; then
+            echo "::error::The policy gate passed a plan it must reject. The policy is not being evaluated."
+            exit 1
+          fi
+          echo "Policy gate correctly rejected the non-compliant plan."
+
+  # ---------------------------------------------------------------------------
+  iac-scan:
+    name: IaC scan (checkov)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      security-events: write # SARIF upload to code scanning
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra/terraform
+          config_file: infra/terraform/.checkov.yaml
+          framework: terraform
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+          quiet: true
+          soft_fail: false
+          download_external_modules: false
+
+      - name: Upload checkov SARIF
+        if: ${{ always() && (!github.event.repository.private || vars.CODE_SCANNING_ENABLED == 'true') }}
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: checkov.sarif
+          category: checkov

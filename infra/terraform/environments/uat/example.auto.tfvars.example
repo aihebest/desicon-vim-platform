@@ -1,0 +1,34 @@
+# Copy to uat.auto.tfvars (gitignored) and fill in. Terraform loads any
+# *.auto.tfvars file automatically -- a file called plain "uat.tfvars" is
+# NOT auto-loaded and Terraform will prompt for every value instead.
+#
+# None of these are secrets (they are IDs and names), but they are specific to
+# Desicon's tenant, so they stay out of the repository. In GitHub Actions the
+# same values come from environment variables (TF_VAR_<name>) set from the
+# GitHub Environment's variables -- see .github/workflows/deploy.yml.
+
+subscription_id = "00000000-0000-0000-0000-000000000000"
+
+# Entra security group that administers the SQL server (no SQL passwords exist).
+sql_admin_group_name      = "grp-vim-sql-admins-uat"
+sql_admin_group_object_id = "00000000-0000-0000-0000-000000000000"
+
+# Created by infra/scripts/bootstrap-entra-app.ps1 -Environment uat
+entra_workbench_client_id = "00000000-0000-0000-0000-000000000000"
+
+# People allowed to set bc-client-secret in Key Vault (a group object ID is best).
+keyvault_secrets_officer_object_ids = ["00000000-0000-0000-0000-000000000000"]
+
+# Business Central API connection (the secret is NOT here -- it goes in Key Vault).
+business_central_tenant_id   = "00000000-0000-0000-0000-000000000000"
+business_central_environment = "Sandbox"
+business_central_company_id  = "00000000-0000-0000-0000-000000000000"
+business_central_client_id   = "00000000-0000-0000-0000-000000000000"
+
+# Shared mailbox the function app reads invoices from.
+mailbox_user_id = "invoices-test@desicongroup.com"
+
+# Your PC's public IP, only if you need to run create-sql-users.sql from it
+# while the SQL public endpoint is on. Find it with:
+#   (Invoke-RestMethod https://api.ipify.org)
+sql_allowed_ip_addresses = []

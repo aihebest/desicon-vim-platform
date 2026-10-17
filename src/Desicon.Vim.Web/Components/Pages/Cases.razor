@@ -1,0 +1,67 @@
+@page "/cases"
+@inherits VimComponentBase
+
+<PageTitle>All cases · Desicon VIM</PageTitle>
+<h1>All cases</h1>
+
+<form class="filters" @onsubmit="SearchAsync" @onsubmit:preventDefault>
+    <input placeholder="Reference, vendor, invoice no., PO/SO or email" @bind="_text" class="grow" />
+    <select @bind="_status">
+        <option value="">Any status</option>
+        @foreach (var s in Enum.GetValues<CaseStatus>())
+        {
+            <option value="@s">@s</option>
+        }
+    </select>
+    <label class="inline"><input type="checkbox" @bind="Overdue" /> Overdue only</label>
+    <button type="submit" class="primary">Search</button>
+</form>
+
+@if (_result is not null)
+{
+    <section class="panel">
+        <CaseTable Items="_result.Items" EmptyText="No cases match." />
+        <div class="pager">
+            <button disabled="@(_page <= 1)" @onclick="() => GoAsync(_page - 1)">Previous</button>
+            <span>Page @_page of @Math.Max(1, (int)Math.Ceiling(_result.TotalCount / (double)PageSize)) · @_result.TotalCount cases</span>
+            <button disabled="@(_page * PageSize >= _result.TotalCount)" @onclick="() => GoAsync(_page + 1)">Next</button>
+        </div>
+    </section>
+}
+
+@code {
+    private const int PageSize = 25;
+    private string? _text;
+    private string _status = string.Empty;
+    private int _page = 1;
+    private PagedResult<CaseSummary>? _result;
+    private bool _loaded;
+
+    [SupplyParameterFromQuery(Name = "status")] public string? StatusQuery { get; set; }
+    [SupplyParameterFromQuery(Name = "overdue")] public bool Overdue { get; set; }
+
+    protected override async Task LoadAsync()
+    {
+        if (!_loaded)
+        {
+            _status = StatusQuery ?? string.Empty;
+            _loaded = true;
+        }
+
+        var statuses = Enum.TryParse<CaseStatus>(_status, out var s) ? new[] { s } : null;
+        var search = new CaseSearch(_text, statuses, OverdueOnly: Overdue, Page: _page, PageSize: PageSize);
+        _result = await InScope(sp => sp.GetRequiredService<ICaseQueries>().SearchAsync(search, default));
+    }
+
+    private async Task SearchAsync()
+    {
+        _page = 1;
+        await LoadAsync();
+    }
+
+    private async Task GoAsync(int page)
+    {
+        _page = page;
+        await LoadAsync();
+    }
+}

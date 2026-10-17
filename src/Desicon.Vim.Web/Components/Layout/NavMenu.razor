@@ -1,0 +1,12 @@
+<nav class="nav">
+    <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+    <NavLink href="queue">My queue</NavLink>
+    <NavLink href="cases">All cases</NavLink>
+    <AuthorizeView Policy="@Policies.DocumentController">
+        <NavLink href="cases/new-physical">Log physical submission</NavLink>
+    </AuthorizeView>
+    <AuthorizeView Policy="@Policies.Administration">
+        <div class="nav-section">Administration</div>
+        <NavLink href="admin/routes">Invoice routing</NavLink>
+    </AuthorizeView>
+</nav>

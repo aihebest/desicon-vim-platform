@@ -1,0 +1,31 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <aside class="sidebar">
+        <div class="brand">
+            <span class="brand-mark">D</span>
+            <div>
+                <div class="brand-name">Desicon</div>
+                <div class="brand-sub">Vendor Invoice Management</div>
+            </div>
+        </div>
+        <NavMenu />
+    </aside>
+    <main class="content">
+        <header class="topbar">
+            <AuthorizeView>
+                <Authorized>
+                    <span class="user">@context.User.FindFirst("name")?.Value</span>
+                    <a class="signout" href="MicrosoftIdentity/Account/SignOut">Sign out</a>
+                </Authorized>
+            </AuthorizeView>
+        </header>
+        <div class="page">
+            @Body
+        </div>
+    </main>
+</div>
+
+<div id="blazor-error-ui">
+    Something went wrong. <a href="" class="reload">Reload</a>
+</div>

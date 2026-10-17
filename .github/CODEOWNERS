@@ -1,0 +1,16 @@
+# Code owners -- GitHub requests a review from these people automatically.
+#
+# To make the review REQUIRED, enable "Require review from Code Owners" in
+# the branch protection rule for main. While there is only one maintainer,
+# leave that off (nobody else could approve, which would freeze main) -- this
+# file is ready for the day a second reviewer joins.
+
+*                       @aihebest
+
+# Changes here can open a network path, widen a permission, or change what
+# gets deployed with production credentials -- none of which the application
+# tests would notice.
+/infra/                 @aihebest
+/.github/               @aihebest
+/.config/               @aihebest
+/docs/operations/       @aihebest

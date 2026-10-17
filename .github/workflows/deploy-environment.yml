@@ -1,0 +1,355 @@
+# =============================================================================
+# Reusable: deploy ONE environment (called by deploy.yml for dev, uat, prod).
+#
+#   plan    GitHub environment "<env>-plan" (no reviewers)
+#           terraform plan -> OPA policy gate (conftest) -> plan in job summary
+#   deploy  GitHub environment "<env>" (reviewers required for prod)
+#           apply the saved plan -> EF migrations -> deploy web + functions
+#           -> smoke test GET /health
+#
+# Variables read from the GitHub Environment (Settings > Environments > <env>
+# > Environment variables). None are secrets. Set on BOTH "<env>-plan" and
+# "<env>" unless marked:
+#   AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID, AZURE_CLIENT_ID (deploy identity)
+#   TF_STATE_RESOURCE_GROUP, TF_STATE_STORAGE_ACCOUNT, [TF_STATE_SUBSCRIPTION_ID]
+#   SQL_ADMIN_GROUP_NAME, SQL_ADMIN_GROUP_OBJECT_ID
+#   ENTRA_WORKBENCH_CLIENT_ID
+#   BC_TENANT_ID, BC_ENVIRONMENT, BC_COMPANY_ID, BC_CLIENT_ID
+#   MAILBOX_USER_ID
+#   [KEYVAULT_SECRETS_OFFICER_OBJECT_IDS]  HCL list, e.g. ["<group-object-id>"]
+#   AZURE_MIGRATION_CLIENT_ID   ("<env>" only) the migration identity
+#
+# !!! Pin every `uses:` to a commit SHA -- see the banner in ci.yml.
+# =============================================================================
+
+name: Deploy environment
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: dev, uat or prod
+        type: string
+        required: true
+      runner:
+        description: runs-on label for the deploy job (must reach SQL for migrations)
+        type: string
+        default: ubuntu-latest
+      infra_only:
+        description: Run Terraform only; skip migrations, app deployment and smoke test
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  TF_VERSION: "1.15.9"
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  CONFTEST_VERSION: "0.71.1"
+  CONFTEST_SHA256: "c3f6b2a753bd56e377a1e51a95ae3e057f926f2e9139f7d5b5dfbbaf810f7985"
+  TF_DIR: infra/terraform/environments/${{ inputs.environment }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  plan:
+    name: plan (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}-plan
+    permissions:
+      contents: read
+      id-token: write # request the GitHub OIDC token exchanged for an Azure token
+    concurrency:
+      group: tf-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      # Terraform's azurerm provider and backend authenticate with GitHub OIDC
+      # directly (they fetch fresh tokens themselves for long applies).
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_sql_admin_group_name: ${{ vars.SQL_ADMIN_GROUP_NAME }}
+      TF_VAR_sql_admin_group_object_id: ${{ vars.SQL_ADMIN_GROUP_OBJECT_ID }}
+      TF_VAR_entra_workbench_client_id: ${{ vars.ENTRA_WORKBENCH_CLIENT_ID }}
+      TF_VAR_business_central_tenant_id: ${{ vars.BC_TENANT_ID }}
+      TF_VAR_business_central_environment: ${{ vars.BC_ENVIRONMENT }}
+      TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
+      TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
+      TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
+      TF_VAR_keyvault_secrets_officer_object_ids: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS || '[]' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required variables are set
+        run: |
+          missing=0
+          for v in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID TF_VAR_sql_admin_group_name \
+                   TF_VAR_sql_admin_group_object_id TF_VAR_entra_workbench_client_id \
+                   TF_VAR_business_central_tenant_id TF_VAR_business_central_environment \
+                   TF_VAR_business_central_company_id TF_VAR_business_central_client_id \
+                   TF_VAR_mailbox_user_id; do
+            if [ -z "${!v}" ]; then echo "::error::GitHub environment variable for $v is not set"; missing=1; fi
+          done
+          if [ -z "${{ vars.TF_STATE_RESOURCE_GROUP }}" ] || [ -z "${{ vars.TF_STATE_STORAGE_ACCOUNT }}" ]; then
+            echo "::error::TF_STATE_RESOURCE_GROUP / TF_STATE_STORAGE_ACCOUNT are not set"; missing=1
+          fi
+          exit $missing
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: >
+          terraform -chdir="$TF_DIR" init
+          -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=${{ inputs.environment }}.terraform.tfstate"
+          -backend-config="subscription_id=${{ vars.TF_STATE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}"
+
+      - name: terraform plan
+        id: plan
+        run: |
+          set +e
+          terraform -chdir="$TF_DIR" plan -out=tfplan -lock-timeout=10m -detailed-exitcode -no-color
+          code=$?
+          set -e
+          # 0 = no changes, 2 = changes, anything else = error
+          if [ "$code" -eq 1 ]; then exit 1; fi
+          echo "has_changes=$([ "$code" -eq 2 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Export plan as JSON
+        run: terraform -chdir="$TF_DIR" show -json tfplan > plan.json
+
+      - name: Install conftest
+        run: |
+          curl -sSfL -o conftest.tar.gz \
+            "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          echo "${CONFTEST_SHA256}  conftest.tar.gz" | sha256sum --check --strict
+          tar -xzf conftest.tar.gz conftest
+          sudo mv conftest /usr/local/bin/conftest
+          rm conftest.tar.gz
+
+      - name: Policy gate (conftest)
+        run: conftest test --policy infra/policy/terraform --namespace terraform.vim.security --no-color plan.json
+
+      - name: Plan summary for reviewers
+        run: |
+          {
+            echo "## Terraform plan: ${{ inputs.environment }}"
+            echo ""
+            echo "Changes: **${{ steps.plan.outputs.has_changes }}**. Policy gate: passed."
+            echo ""
+            echo '```'
+            terraform -chdir="$TF_DIR" show -no-color tfplan | head -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # The saved plan is applied verbatim by the deploy job, so what the
+      # reviewer approved is exactly what runs. Short retention: a plan file
+      # can contain sensitive values (e.g. the App Insights connection string).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ env.TF_DIR }}/tfplan
+          retention-days: 1
+          overwrite: true
+          if-no-files-found: error
+
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: deploy (${{ inputs.environment }})
+    needs: plan
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 60
+    environment:
+      name: ${{ inputs.environment }}
+      url: ${{ steps.tfout.outputs.web_app_url }}
+    permissions:
+      contents: read
+      id-token: write
+    concurrency:
+      group: tf-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      # Same Terraform/OIDC settings as the plan job.
+      ARM_USE_OIDC: "true"
+      ARM_USE_AZUREAD: "true"
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_subscription_id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      TF_VAR_sql_admin_group_name: ${{ vars.SQL_ADMIN_GROUP_NAME }}
+      TF_VAR_sql_admin_group_object_id: ${{ vars.SQL_ADMIN_GROUP_OBJECT_ID }}
+      TF_VAR_entra_workbench_client_id: ${{ vars.ENTRA_WORKBENCH_CLIENT_ID }}
+      TF_VAR_business_central_tenant_id: ${{ vars.BC_TENANT_ID }}
+      TF_VAR_business_central_environment: ${{ vars.BC_ENVIRONMENT }}
+      TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
+      TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
+      TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
+      TF_VAR_keyvault_secrets_officer_object_ids: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS || '[]' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: terraform init
+        run: >
+          terraform -chdir="$TF_DIR" init
+          -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}"
+          -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}"
+          -backend-config="container_name=tfstate"
+          -backend-config="key=${{ inputs.environment }}.terraform.tfstate"
+          -backend-config="subscription_id=${{ vars.TF_STATE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment }}
+          path: ${{ env.TF_DIR }}
+
+      # Applies the reviewed plan only. If anything changed in Azure or in
+      # state since the plan was made, Terraform refuses ("saved plan is
+      # stale") and the run must be repeated -- which is the safe outcome.
+      - name: terraform apply (saved plan)
+        run: terraform -chdir="$TF_DIR" apply -lock-timeout=10m -no-color tfplan
+
+      - name: Read Terraform outputs
+        id: tfout
+        run: |
+          out() { terraform -chdir="$TF_DIR" output -raw "$1"; }
+          {
+            echo "resource_group=$(out resource_group_name)"
+            echo "web_app_name=$(out web_app_name)"
+            echo "web_app_url=$(out web_app_url)"
+            echo "function_app_name=$(out function_app_name)"
+            echo "sql_server_name=$(out sql_server_name)"
+            echo "sql_server_fqdn=$(out sql_server_fqdn)"
+            echo "sql_database_name=$(out sql_database_name)"
+            echo "private_networking=$(terraform -chdir="$TF_DIR" output -json private_networking_enabled)"
+          } >> "$GITHUB_OUTPUT"
+
+      # ---- Database migrations -------------------------------------------------
+      # Sign in as the DEPLOY identity first: it may manage the SQL firewall.
+      - name: Azure login (deploy identity)
+        if: ${{ !inputs.infra_only }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Public endpoint (dev/uat): admit this runner's IP for the duration of
+      # the migration only. Removed again in the always() step below.
+      - name: Open SQL firewall for this runner
+        id: fw
+        if: ${{ !inputs.infra_only && steps.tfout.outputs.private_networking == 'false' }}
+        run: |
+          ip=$(curl -sSf https://api.ipify.org)
+          name="gha-migrate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          az sql server firewall-rule create \
+            --resource-group "${{ steps.tfout.outputs.resource_group }}" \
+            --server "${{ steps.tfout.outputs.sql_server_name }}" \
+            --name "$name" --start-ip-address "$ip" --end-ip-address "$ip" --output none
+          echo "rule_name=$name" >> "$GITHUB_OUTPUT"
+          sleep 30 # firewall changes can take a few seconds to apply
+
+      # Switch to the MIGRATION identity. It has no Azure roles at all
+      # (allow-no-subscriptions) -- only db_ddladmin in the database, granted
+      # by infra/scripts/create-sql-users.sql. The apps' identities cannot
+      # change the schema; this one cannot read secrets or touch resources.
+      - name: Azure login (migration identity)
+        if: ${{ !inputs.infra_only }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_MIGRATION_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          allow-no-subscriptions: true
+
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.infra_only }}
+        with:
+          name: efbundle
+          path: efbundle
+
+      # "Active Directory Default" makes SqlClient use DefaultAzureCredential,
+      # which picks up the Azure CLI sign-in from the step above.
+      - name: Apply EF Core migrations
+        if: ${{ !inputs.infra_only }}
+        run: |
+          chmod +x efbundle/efbundle
+          ./efbundle/efbundle --connection \
+            "Server=tcp:${{ steps.tfout.outputs.sql_server_fqdn }},1433;Database=${{ steps.tfout.outputs.sql_database_name }};Authentication=Active Directory Default;Encrypt=True;"
+
+      # Back to the deploy identity for app deployment and firewall cleanup.
+      - name: Azure login (deploy identity, again)
+        if: ${{ always() && !inputs.infra_only }}
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Close SQL firewall
+        if: ${{ always() && steps.fw.outputs.rule_name != '' }}
+        run: |
+          az sql server firewall-rule delete \
+            --resource-group "${{ steps.tfout.outputs.resource_group }}" \
+            --server "${{ steps.tfout.outputs.sql_server_name }}" \
+            --name "${{ steps.fw.outputs.rule_name }}"
+
+      # ---- Application deployment ------------------------------------------------
+      # Both actions use the Azure CLI sign-in (Entra token), so publishing
+      # profiles / basic auth stay disabled on the apps.
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.infra_only }}
+        with:
+          name: web
+          path: web
+
+      - name: Deploy web app
+        if: ${{ !inputs.infra_only }}
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ steps.tfout.outputs.web_app_name }}
+          package: web
+
+      - uses: actions/download-artifact@v4
+        if: ${{ !inputs.infra_only }}
+        with:
+          name: functions
+          path: functions
+
+      - name: Deploy function app
+        if: ${{ !inputs.infra_only }}
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.tfout.outputs.function_app_name }}
+          package: functions
+
+      # ---- Smoke test ----------------------------------------------------------------
+      # /health is anonymous and checks the database connection, so a pass
+      # means: app started, managed identity works, SQL user exists, schema is
+      # migrated.
+      - name: Smoke test GET /health
+        if: ${{ !inputs.infra_only }}
+        run: |
+          url="${{ steps.tfout.outputs.web_app_url }}/health"
+          echo "Checking $url"
+          curl --fail --silent --show-error --max-time 30 \
+               --retry 12 --retry-delay 15 --retry-all-errors "$url"
+          echo
+          state=$(az functionapp show -g "${{ steps.tfout.outputs.resource_group }}" \
+                    -n "${{ steps.tfout.outputs.function_app_name }}" --query state -o tsv)
+          echo "Function app state: $state"
+          [ "$state" = "Running" ]

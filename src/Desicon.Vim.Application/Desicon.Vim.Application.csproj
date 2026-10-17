@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Use cases and ports. Depends only on the domain; no Azure SDKs here. -->
+  <PropertyGroup>
+    <RootNamespace>Desicon.Vim.Application</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Gives ILogger/IOptions abstractions from the shared framework (no NuGet download). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <InternalsVisibleTo Include="Desicon.Vim.Application.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Desicon.Vim.Domain\Desicon.Vim.Domain.csproj" />
+  </ItemGroup>
+</Project>

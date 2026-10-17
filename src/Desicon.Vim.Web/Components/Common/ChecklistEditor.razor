@@ -1,0 +1,48 @@
+@* Yes / No / NA answers for one checklist stage, grouped by Finance's section headings. *@
+@foreach (var grp in Items.GroupBy(i => i.Section))
+{
+    <fieldset class="checklist">
+        <legend>@grp.Key</legend>
+        @foreach (var item in grp)
+        {
+            var answer = Answers.TryGetValue(item.Code, out var a) ? a : ChecklistAnswer.Unanswered;
+            <div class="check-row @(answer == ChecklistAnswer.No ? "check-no" : "")">
+                <div class="check-text">
+                    @item.Text
+                    @if (!item.Mandatory) { <span class="muted"> (optional)</span> }
+                </div>
+                <div class="check-options" role="radiogroup" aria-label="@item.Text">
+                    <button type="button" class="opt @(answer == ChecklistAnswer.Yes ? "on-yes" : "")" @onclick="() => Set(item.Code, ChecklistAnswer.Yes)">Yes</button>
+                    <button type="button" class="opt @(answer == ChecklistAnswer.No ? "on-no" : "")" @onclick="() => Set(item.Code, ChecklistAnswer.No)">No</button>
+                    @if (item.AllowNotApplicable)
+                    {
+                        <button type="button" class="opt @(answer == ChecklistAnswer.NotApplicable ? "on-na" : "")" @onclick="() => Set(item.Code, ChecklistAnswer.NotApplicable)">NA</button>
+                    }
+                </div>
+                <input class="check-remark" placeholder="Remark" value="@(Remarks.GetValueOrDefault(item.Code))" @onchange="e => Remarks[item.Code] = e.Value?.ToString() ?? string.Empty" />
+            </div>
+        }
+    </fieldset>
+}
+<div class="check-actions">
+    <span class="muted">@Answers.Count(a => a.Value != ChecklistAnswer.Unanswered) of @Items.Count answered</span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public IReadOnlyList<ChecklistItem> Items { get; set; } = [];
+
+    public Dictionary<string, ChecklistAnswer> Answers { get; } = [];
+
+    public Dictionary<string, string> Remarks { get; } = [];
+
+    public IReadOnlyCollection<ChecklistResponse> Responses =>
+        Items.Select(i => new ChecklistResponse(
+            i.Code,
+            Answers.GetValueOrDefault(i.Code, ChecklistAnswer.Unanswered),
+            string.IsNullOrWhiteSpace(Remarks.GetValueOrDefault(i.Code)) ? null : Remarks[i.Code])).ToList();
+
+    private void Set(string code, ChecklistAnswer answer) => Answers[code] = answer;
+
+    // Deliberately no "mark all Yes": each item must be answered on its own,
+    // so the recorded checklist is real evidence rather than a rubber stamp.
+}

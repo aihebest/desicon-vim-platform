@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The domain has ZERO package references on purpose: business rules must not
+    depend on Azure, EF Core or any web framework. Keep it that way.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Desicon.Vim.Domain</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Desicon.Vim.Domain.Tests" />
+  </ItemGroup>
+</Project>

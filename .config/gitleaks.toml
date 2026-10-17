@@ -1,0 +1,64 @@
+# Gitleaks configuration -- secret detection for the Desicon VIM Platform.
+#
+# Used by the "secrets" job in .github/workflows/ci.yml (full git history) and
+# locally with:
+#   gitleaks git --config .config/gitleaks.toml --verbose
+#
+# The platform authenticates everything with managed identities and OIDC, so
+# the repository should contain NO credentials at all. The custom rules below
+# catch the Azure-specific shapes a credential would take if someone pasted
+# one in "just for testing".
+
+title = "Desicon VIM Platform - secret detection"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "azure-sql-connection-string-with-password"
+description = "SQL connection string carrying a password (VIM uses Authentication=Active Directory Default, never a password)"
+regex = '''(?i)(?:Server|Data Source)\s*=.{0,200}?(?:Password|Pwd)\s*=\s*([^;"'\s]{4,})'''
+secretGroup = 1
+tags = ["azure", "sql", "credential"]
+
+[[rules]]
+id = "azure-storage-account-key"
+description = "Storage account key or key-bearing connection string (shared keys are disabled on every VIM account)"
+regex = '''(?i)AccountKey\s*=\s*[A-Za-z0-9+/=]{60,}'''
+tags = ["azure", "storage", "credential"]
+
+[[rules]]
+id = "azure-storage-sas-token"
+description = "Storage SAS token (signature parameter)"
+regex = '''(?i)[?&]sig=[A-Za-z0-9%+/=]{40,}'''
+tags = ["azure", "storage", "credential"]
+
+[[rules]]
+id = "entra-client-secret"
+description = "Microsoft Entra client secret (e.g. the Business Central API secret, which belongs only in Key Vault)"
+regex = '''(?i)(?:client[_-]?secret)\s*["']?\s*[:=]\s*["']?([A-Za-z0-9_~.\-]{3}\dQ~[A-Za-z0-9_~.\-]{31,34})'''
+secretGroup = 1
+tags = ["azure", "entra", "credential"]
+
+[[rules]]
+id = "app-insights-instrumentation-key-in-config"
+description = "Application Insights connection string committed to configuration (it is set by Terraform as an app setting)"
+regex = '''(?i)InstrumentationKey=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+tags = ["azure", "telemetry"]
+
+[allowlist]
+description = "Credential-free forms and placeholders"
+# Match the allowlist regexes against the whole matched text, not just the
+# captured secret, so that context such as the placeholder literal counts.
+regexTarget = "match"
+paths = [
+  '''(^|/)\.config/gitleaks\.toml$''',
+  '''\.example$''',
+  '''(^|/)infra/policy/terraform/testdata/.*\.json$''',
+]
+# Placeholders used in documentation and examples.
+regexes = [
+  '''00000000-0000-0000-0000-000000000000''',
+  '''Authentication=Active Directory Default''',
+  '''@Microsoft\.KeyVault\(SecretUri=''',
+]
