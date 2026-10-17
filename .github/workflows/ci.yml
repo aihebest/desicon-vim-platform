@@ -102,7 +102,7 @@ jobs:
         run: |
           set -o pipefail
           dotnet build Desicon.Vim.sln -c Release --no-restore -warnaserror 2>&1 | tee build.log || {
-            grep -E "error [A-Z]+[0-9]+" build.log | sed 's|/home/runner/work/desicon-vim-platform/desicon-vim-platform/||g' | sort -u | head -60 | sed 's/^/::error::/'
+            grep -E -i "(: error|error :|error [A-Z]+[0-9]+|FAILED|Exception)" build.log | sed 's|/home/runner/work/desicon-vim-platform/desicon-vim-platform/||g' | sort -u | head -60 | sed 's/^/::error::/'
             exit 1
           }
 
