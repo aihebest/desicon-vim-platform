@@ -91,7 +91,9 @@ jobs:
       - name: Report resolved package versions
         shell: bash
         run: |
-          dotnet list Desicon.Vim.sln package 2>/dev/null | grep -E "^\s+>" | awk '{print $2" requested="$3" resolved="$NF}' | sort -u | sed 's/^/::notice title=package::/'
+          # One annotation (GitHub shows at most 10 per step); %0A is a line break.
+          list=$(dotnet list Desicon.Vim.sln package --include-transitive 2>/dev/null | grep -E "^\s+>" | awk '{print $2"="$NF}' | sort -u | grep -E "^(Azure|Microsoft\.(Graph|Kiota|Identity|EntityFramework|Azure|ApplicationInsights|Data\.SqlClient)|System\.Security)" | paste -sd ' ' -)
+          echo "::notice title=Resolved packages::${list}"
 
       # TreatWarningsAsErrors is already true in Directory.Build.props; it is
       # repeated here so CI cannot be loosened by editing that file alone.
