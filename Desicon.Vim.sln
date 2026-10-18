@@ -19,6 +19,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Desicon.Vim.Infrastructure"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Desicon.Vim.Functions", "src\Desicon.Vim.Functions\Desicon.Vim.Functions.csproj", "{3A30A8BC-FF05-480F-87D7-3D8B186B8540}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Desicon.Vim.Web", "src\Desicon.Vim.Web\Desicon.Vim.Web.csproj", "{BE046817-193B-401E-9912-A3083E8A8F84}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -101,6 +103,18 @@ Global
 		{3A30A8BC-FF05-480F-87D7-3D8B186B8540}.Release|x64.Build.0 = Release|Any CPU
 		{3A30A8BC-FF05-480F-87D7-3D8B186B8540}.Release|x86.ActiveCfg = Release|Any CPU
 		{3A30A8BC-FF05-480F-87D7-3D8B186B8540}.Release|x86.Build.0 = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|x64.Build.0 = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Debug|x86.Build.0 = Debug|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|x64.ActiveCfg = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|x64.Build.0 = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|x86.ActiveCfg = Release|Any CPU
+		{BE046817-193B-401E-9912-A3083E8A8F84}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -112,5 +126,6 @@ Global
 		{277D2D82-76A8-4B1D-8D50-9F216C068558} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{B6F32AF8-2EF9-476F-807B-87C3D0253E3F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{3A30A8BC-FF05-480F-87D7-3D8B186B8540} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{BE046817-193B-401E-9912-A3083E8A8F84} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal
