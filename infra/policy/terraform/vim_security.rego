@@ -137,12 +137,24 @@ sql_entra_only(r) if {
 	admin.azuread_authentication_only == true
 }
 
+# Azure gives every SQL server an internal administrator_login, even an
+# Entra-only one, and Terraform reads it back after the first apply. That
+# placeholder cannot sign in (password authentication is off), so it is
+# accepted when it is unchanged on an Entra-only server. Anything else --
+# setting a login in configuration (it appears on create, or as a change),
+# or a login on a server that is not Entra-only -- is denied.
 deny contains msg if {
 	some r in resources_of("azurerm_mssql_server")
 	login := object.get(after(r), "administrator_login", null)
 	login != null
 	login != ""
+	not sql_placeholder_login(r, login)
 	msg := sprintf("%s: administrator_login must not be set; the server has no SQL admin login.", [r.address])
+}
+
+sql_placeholder_login(r, login) if {
+	sql_entra_only(r)
+	object.get(object.get(r.change, "before", {}), "administrator_login", null) == login
 }
 
 # -- 6. Key Vault purge protection --------------------------------------------------------
