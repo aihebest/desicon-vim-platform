@@ -61,15 +61,16 @@ dotnet build
 # 3. Generate the initial migration into src/Desicon.Vim.Infrastructure/Persistence/Migrations
 dotnet ef migrations add InitialCreate `
   -p src/Desicon.Vim.Infrastructure `
-  -s src/Desicon.Vim.Web `
+  -s src/Desicon.Vim.Infrastructure `
   -o Persistence/Migrations
 ```
 
 - `-p` (project) is where the migration files go: the Infrastructure project.
-- `-s` (startup project) is the app the tool would normally start. You do not
-  need a database or secrets for this step: the Infrastructure project
-  contains `DesignTimeVimDbContextFactory`, which the tool uses instead of
-  starting the web app.
+- `-s` (startup project) is also the Infrastructure project. It is the only
+  project that references `Microsoft.EntityFrameworkCore.Design` (the web app
+  does not, so `-s src/Desicon.Vim.Web` fails), and it contains
+  `DesignTimeVimDbContextFactory`, which the tool uses to build the
+  `DbContext`. You do not need a database or secrets for this step.
 
 Open the generated `..._InitialCreate.cs` and check it: you should see
 `EnsureSchema("vim")`, the sequence `CaseReferenceSeq`, the nine tables and
