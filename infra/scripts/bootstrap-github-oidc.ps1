@@ -103,11 +103,36 @@ function Add-RoleIfMissing([string] $spId, [string] $role, [string] $scope, [str
     Write-Host "  Granted '$role'"
 }
 
+# GitHub may present the repository in its newer, rename-proof form
+# "repo:owner@<ownerId>/name@<repoId>:environment:<env>" instead of
+# "repo:owner/name:environment:<env>". Entra matches the subject exactly, so
+# trust both. The ids come from the GitHub CLI; without it only the classic
+# form is added (add the other later by re-running with gh signed in).
+$repoIdForm = $null
+if (Get-Command gh -ErrorAction SilentlyContinue) {
+    # One field per call: no quotes inside --jq (Windows PowerShell 5.1 strips them).
+    $ghOwner   = gh api "repos/$GitHubRepository" --jq .owner.login 2>$null
+    $ghOwnerId = gh api "repos/$GitHubRepository" --jq .owner.id 2>$null
+    $ghName    = gh api "repos/$GitHubRepository" --jq .name 2>$null
+    $ghRepoId  = gh api "repos/$GitHubRepository" --jq .id 2>$null
+    if ($ghOwner -and $ghOwnerId -and $ghName -and $ghRepoId) {
+        $repoIdForm = "$ghOwner@$ghOwnerId/$ghName@$ghRepoId"
+    }
+}
+if (-not $repoIdForm) { Write-Warning "GitHub CLI not available or not signed in: adding only the classic subject format." }
+
+function Add-GitHubTrust([string] $appId, [string] $credName, [string] $githubEnvironment) {
+    Add-FederatedCredential $appId $credName "repo:${GitHubRepository}:environment:$githubEnvironment"
+    if ($repoIdForm) {
+        Add-FederatedCredential $appId "$credName-ids" "repo:${repoIdForm}:environment:$githubEnvironment"
+    }
+}
+
 # -- 1. Deploy identity ------------------------------------------------------
 Write-Host "1/2 Deploy identity" -ForegroundColor Cyan
 $deploy = Get-OrCreateApp "sp-vim-deploy-$Environment"
-Add-FederatedCredential $deploy.AppId "github-$Environment-plan" "repo:${GitHubRepository}:environment:$Environment-plan"
-Add-FederatedCredential $deploy.AppId "github-$Environment" "repo:${GitHubRepository}:environment:$Environment"
+Add-GitHubTrust $deploy.AppId "github-$Environment-plan" "$Environment-plan"
+Add-GitHubTrust $deploy.AppId "github-$Environment" $Environment
 
 $subScope = "/subscriptions/$subscriptionId"
 Add-RoleIfMissing $deploy.SpId 'Contributor' $subScope
@@ -137,7 +162,7 @@ Add-RoleIfMissing $deploy.SpId 'Storage Blob Data Contributor' $stateScope
 # -- 2. Migration identity ------------------------------------------------------
 Write-Host "2/2 Migration identity" -ForegroundColor Cyan
 $migrations = Get-OrCreateApp "sp-vim-migrations-$Environment"
-Add-FederatedCredential $migrations.AppId "github-$Environment" "repo:${GitHubRepository}:environment:$Environment"
+Add-GitHubTrust $migrations.AppId "github-$Environment" $Environment
 Write-Host "  (No Azure roles -- database rights come from create-sql-users.sql)"
 
 Write-Host ""
