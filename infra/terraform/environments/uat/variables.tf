@@ -109,7 +109,7 @@ variable "business_central_client_id" {
 
 # -- Mailbox ----------------------------------------------------------------------------
 variable "mailbox_user_id" {
-  description = "UPN of the shared invoice mailbox the function app reads, e.g. invoices@desicongroup.com. Use a separate test mailbox outside prod."
+  description = "UPN of the shared invoice mailbox the function app reads, e.g. invoices@example.com. Use a separate test mailbox outside prod."
   type        = string
 }
 

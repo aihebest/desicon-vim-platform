@@ -166,7 +166,7 @@ foreach ($env in "dev-plan","dev") {
   gh variable set BC_ENVIRONMENT            --repo $repo --env $env --body "Sandbox"
   gh variable set BC_COMPANY_ID             --repo $repo --env $env --body "<BC company GUID>"
   gh variable set BC_CLIENT_ID              --repo $repo --env $env --body "<BC API app client id>"
-  gh variable set MAILBOX_USER_ID           --repo $repo --env $env --body "invoices-test@desicongroup.com"
+  gh variable set MAILBOX_USER_ID           --repo $repo --env $env --body "invoices-test@example.com"
   gh variable set KEYVAULT_SECRETS_OFFICER_OBJECT_IDS --repo $repo --env $env --body '["<grp-vim-kv-secrets-dev id>"]'
 }
 gh variable set AZURE_MIGRATION_CLIENT_ID --repo $repo --env dev --body "<sp-vim-migrations-dev appId>"
@@ -223,7 +223,7 @@ The function app reads the invoice mailbox through Microsoft Graph. Granted norm
 
 ```powershell
 $func = terraform -chdir=..\terraform\environments\dev output -raw function_app_principal_id
-.\grant-mailbox-access.ps1 -FunctionAppPrincipalId $func -MailboxAddress invoices-test@desicongroup.com `
+.\grant-mailbox-access.ps1 -FunctionAppPrincipalId $func -MailboxAddress invoices-test@example.com `
     -Environment dev -TestMailboxAddress <some other mailbox>
 ```
 

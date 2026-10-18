@@ -82,9 +82,22 @@ jobs:
       TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
-      TF_VAR_keyvault_secrets_officer_object_ids: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS || '[]' }}
+      KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v4
+
+      # KEYVAULT_SECRETS_OFFICER_OBJECT_IDS may be entered as ["id1","id2"],
+      # [id1,id2] (Windows PowerShell 5.1 strips the inner quotes) or id1,id2.
+      # Turn any of those into the HCL list Terraform expects.
+      - name: Normalise Key Vault secrets officer list
+        run: |
+          ids=$(printf '%s' "$KV_OFFICERS_RAW" | tr -d '[]"'"'"' \r\n' | tr ',' '\n' | sed '/^$/d')
+          for id in $ids; do
+            [[ "$id" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "::error::KEYVAULT_SECRETS_OFFICER_OBJECT_IDS contains '$id', which is not an object id."; exit 1; }
+          done
+          list=$(printf '%s\n' $ids | sed '/^$/d; s/.*/"&"/' | paste -sd, -)
+          echo "TF_VAR_keyvault_secrets_officer_object_ids=[$list]" >> "$GITHUB_ENV"
+          echo "Key Vault secrets officers: [$list]"
 
       - name: Check required variables are set
         run: |
@@ -195,9 +208,22 @@ jobs:
       TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
-      TF_VAR_keyvault_secrets_officer_object_ids: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS || '[]' }}
+      KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v4
+
+      # KEYVAULT_SECRETS_OFFICER_OBJECT_IDS may be entered as ["id1","id2"],
+      # [id1,id2] (Windows PowerShell 5.1 strips the inner quotes) or id1,id2.
+      # Turn any of those into the HCL list Terraform expects.
+      - name: Normalise Key Vault secrets officer list
+        run: |
+          ids=$(printf '%s' "$KV_OFFICERS_RAW" | tr -d '[]"'"'"' \r\n' | tr ',' '\n' | sed '/^$/d')
+          for id in $ids; do
+            [[ "$id" =~ ^[0-9a-fA-F-]{36}$ ]] || { echo "::error::KEYVAULT_SECRETS_OFFICER_OBJECT_IDS contains '$id', which is not an object id."; exit 1; }
+          done
+          list=$(printf '%s\n' $ids | sed '/^$/d; s/.*/"&"/' | paste -sd, -)
+          echo "TF_VAR_keyvault_secrets_officer_object_ids=[$list]" >> "$GITHUB_ENV"
+          echo "Key Vault secrets officers: [$list]"
 
       - uses: hashicorp/setup-terraform@v3
         with:

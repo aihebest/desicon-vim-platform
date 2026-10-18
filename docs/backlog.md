@@ -22,7 +22,7 @@
 ## Decisions needed from Finance (design basis §13.3)
 
 - [ ] Admin / Logistics invoices: Logistics Manager (SOP) or Admin Manager?
-- [ ] Invoice mailbox domain (desicon-eng.com vs desicongroup.com)
+- [ ] Invoice mailbox domain to confirm with Finance
 - [ ] "48 hours" for review: calendar or working hours? (default: calendar, `Vim:VerificationBasis`)
 - [ ] Confirm checklist wording "does not exceed remaining PO/SO balance" (code: `REV_AMOUNT_WITHIN_ORDER`)
 - [ ] Add "Invoice" to the materials list in SOP section 6

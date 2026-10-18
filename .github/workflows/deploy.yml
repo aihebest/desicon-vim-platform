@@ -1,7 +1,7 @@
 # =============================================================================
 # Deploy -- Desicon VIM Platform
 #
-# Push to main (or run manually) => build once => dev => uat => prod.
+# Push to main (when DEPLOY_ON_PUSH = 'true') or run manually => build once => dev => uat => prod.
 #
 #   build     publish Desicon.Vim.Web, Desicon.Vim.Functions and an EF Core
 #             migration bundle ONCE; every environment deploys the same bits.
@@ -56,6 +56,10 @@ env:
 jobs:
   build:
     name: Build and publish
+    # Automatic deploys on push stay off until the repository variable
+    # DEPLOY_ON_PUSH is 'true' (set it once dev, uat and prod are bootstrapped).
+    # Manual runs (workflow_dispatch) always work.
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.DEPLOY_ON_PUSH == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
