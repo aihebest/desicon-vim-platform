@@ -145,6 +145,40 @@ test_sql_admin_login_denied if {
 	any_contains(denies(plan("dev", [change("azurerm_mssql_server", "sql", bad)])), "administrator_login")
 }
 
+test_sql_azure_placeholder_login_on_existing_entra_only_server_passes if {
+	existing := object.union(compliant_sql, {"administrator_login": "CloudSA1a2b3c4d"})
+	upd := {
+		"address": "azurerm_mssql_server.sql",
+		"type": "azurerm_mssql_server",
+		"change": {"actions": ["no-op"], "before": existing, "after": existing},
+	}
+	not any_contains(denies(plan("dev", [upd])), "administrator_login")
+}
+
+test_sql_login_changed_on_existing_server_denied if {
+	before := object.union(compliant_sql, {"administrator_login": "CloudSA1a2b3c4d"})
+	after := object.union(compliant_sql, {"administrator_login": "sqladmin"})
+	upd := {
+		"address": "azurerm_mssql_server.sql",
+		"type": "azurerm_mssql_server",
+		"change": {"actions": ["update"], "before": before, "after": after},
+	}
+	any_contains(denies(plan("dev", [upd])), "administrator_login")
+}
+
+test_sql_existing_login_without_entra_only_denied if {
+	existing := object.union(compliant_sql, {
+		"administrator_login": "CloudSA1a2b3c4d",
+		"azuread_administrator": [{"azuread_authentication_only": false}],
+	})
+	upd := {
+		"address": "azurerm_mssql_server.sql",
+		"type": "azurerm_mssql_server",
+		"change": {"actions": ["no-op"], "before": existing, "after": existing},
+	}
+	any_contains(denies(plan("dev", [upd])), "administrator_login")
+}
+
 # -- 6. Key Vault ------------------------------------------------------------------------
 test_kv_without_purge_protection_denied if {
 	bad := object.union(compliant_kv, {"purge_protection_enabled": false})
