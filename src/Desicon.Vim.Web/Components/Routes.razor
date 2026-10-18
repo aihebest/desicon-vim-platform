@@ -1,0 +1,19 @@
+<Router AppAssembly="typeof(Program).Assembly">
+    <Found Context="routeData">
+        <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(MainLayout)">
+            <NotAuthorized>
+                <div class="panel">
+                    <h2>Access needed</h2>
+                    <p>You are signed in but do not hold a role for the Vendor Invoice Management platform, or this page needs a different role.</p>
+                    <p>Ask ICT to add you to the correct group (Document Controller, Reviewer, Accounts Payable, Finance Manager or Auditor).</p>
+                </div>
+            </NotAuthorized>
+        </AuthorizeRouteView>
+        <FocusOnNavigate RouteData="routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <LayoutView Layout="typeof(MainLayout)">
+            <div class="panel"><h1>Not found</h1><p>That page does not exist.</p></div>
+        </LayoutView>
+    </NotFound>
+</Router>

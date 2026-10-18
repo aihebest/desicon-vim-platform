@@ -1,0 +1,349 @@
+@page "/cases/{Id:guid}"
+@inherits VimComponentBase
+@using System.Text.Json
+@using Desicon.Vim.Domain.Audit
+
+<PageTitle>@(_case?.Reference ?? "Case") · Desicon VIM</PageTitle>
+
+@if (_case is null)
+{
+    <p class="muted">@(_notFound ? "Case not found." : "Loading…")</p>
+    return;
+}
+
+<div class="case-head">
+    <div>
+        <h1>@_case.Reference <StatusBadge Status="_case.Status" /></h1>
+        <div class="muted">
+            @(_case.VendorName ?? _case.SenderName ?? _case.SenderEmail) ·
+            received @Format.Wat(_case.ReceivedAtUtc) by @_case.Channel.ToString().ToLowerInvariant()
+            @if (_case.SubmissionRound > 1) { <span> · submission round @_case.SubmissionRound</span> }
+        </div>
+    </div>
+    @if (_case.DueAtUtc is { } due)
+    {
+        <div class="due @(_case.IsOverdue(DateTimeOffset.UtcNow) ? "overdue" : "")">
+            <div class="muted">Due</div>
+            <strong>@Format.Wat(due)</strong>
+            <div class="muted">@_case.AssignedReviewerName</div>
+        </div>
+    }
+</div>
+
+@if (Error is not null) { <div class="alert alert-error" role="alert">@Error</div> }
+@if (Success is not null) { <div class="alert alert-ok" role="status">@Success</div> }
+
+@if (_case.Flags.Any(f => f.IsOpen))
+{
+    <section class="panel panel-warn">
+        <h2>Open flags</h2>
+        @foreach (var f in _case.Flags.Where(f => f.IsOpen))
+        {
+            <div class="flag-row">
+                <div>
+                    <strong>@f.Code</strong> @(f.Blocking ? "(blocking)" : "")
+                    <div>@f.Description</div>
+                    <div class="muted">Raised @Format.Wat(f.RaisedAtUtc)@(FlagCodes.RequiresFinanceManager(f) ? " · only the Finance Manager can clear this flag" : "")</div>
+                </div>
+                @if (CanResolve(f))
+                {
+                    <div class="flag-resolve">
+                        <input placeholder="How was this checked? (required)" value="@_flagNotes.GetValueOrDefault(f.Id)" @onchange="e => _flagNotes[f.Id] = e.Value?.ToString() ?? string.Empty" />
+                        <button disabled="@Busy" @onclick="() => ResolveFlagAsync(f.Id)">Clear flag</button>
+                    </div>
+                }
+            </div>
+        }
+    </section>
+}
+
+<div class="two-col">
+    <section class="panel">
+        <h2>Invoice details</h2>
+        <dl class="details">
+            <dt>Vendor</dt><dd>@(_case.VendorName ?? "—") @if (_case.VendorNo is not null) { <span class="muted">&nbsp;(@_case.VendorNo)</span> }</dd>
+            <dt>Invoice no.</dt><dd>@(_case.InvoiceNumber ?? "—")</dd>
+            <dt>Invoice date</dt><dd>@(_case.InvoiceDate?.ToString("d MMM yyyy", CultureInfo.InvariantCulture) ?? "—")</dd>
+            <dt>Amount</dt><dd>@Format.Money(_case.Amount, _case.Currency)</dd>
+            <dt>PO / SO</dt><dd>@(_case.OrderNumber ?? "—") @(_case.SupplyType != SupplyType.Unknown ? $"({_case.SupplyType})" : "")</dd>
+            <dt>Category</dt><dd>@(_case.CategoryCode ?? "—")</dd>
+            <dt>Sender</dt><dd>@_case.SenderEmail</dd>
+            <dt>Subject</dt><dd>@_case.SubmissionSubject</dd>
+            @if (_case.ErpDocumentNumber is not null) { <dt>BC document</dt><dd>@_case.ErpDocumentNumber</dd> }
+        </dl>
+    </section>
+
+    <section class="panel">
+        <h2>Documents</h2>
+        <ul class="docs">
+            @foreach (var d in _case.Documents.OrderByDescending(d => d.SubmissionRound).ThenBy(d => d.AddedAtUtc))
+            {
+                <li>
+                    @if (d.ScanStatus == ScanStatus.Malicious || d.ScanStatus == ScanStatus.ScanFailed)
+                    {
+                        <span class="flag flag-block">Blocked</span> @d.FileName
+                    }
+                    else if (d.ScanStatus == ScanStatus.Pending)
+                    {
+                        <span title="Files open once the malware scan has finished, usually within a minute or two.">@d.FileName (scan in progress)</span>
+                    }
+                    else
+                    {
+                        <a href="documents/@_case.Id/@d.Id" target="_blank" rel="noopener">@d.FileName</a>
+                    }
+                    <span class="muted">round @d.SubmissionRound · @(d.SizeBytes / 1024) KB · scan: @d.ScanStatus</span>
+                </li>
+            }
+        </ul>
+    </section>
+</div>
+
+@if (_actions.Count > 0)
+{
+    <section class="panel actions">
+        <h2>Actions</h2>
+
+        @if (_actions.Contains(CaseAction.Register))
+        {
+            <h3>Register submission</h3>
+            <p class="muted">Confirm the details against the PDF, choose the category, and answer every intake check. Suggested values come from automatic reading of the invoice — check them.</p>
+            <div class="form-grid">
+                <label>Vendor name<input @bind="_form.VendorName" /></label>
+                <label>BC vendor no.<input @bind="_form.VendorNo" /></label>
+                <label>Invoice no.<input @bind="_form.InvoiceNumber" /></label>
+                <label>Invoice date<input type="date" @bind="_form.InvoiceDate" /></label>
+                <label>Amount<input type="number" step="0.01" @bind="_form.Amount" /></label>
+                <label>Currency
+                    <select @bind="_form.Currency"><option>NGN</option><option>USD</option><option>EUR</option><option>GBP</option></select>
+                </label>
+                <label>PO / SO no.<input @bind="_form.OrderNumber" /></label>
+                <label>Supply type
+                    <select @bind="_form.SupplyType">
+                        <option value="@SupplyType.Unknown">Select…</option>
+                        <option value="@SupplyType.Materials">Materials delivered (PO)</option>
+                        <option value="@SupplyType.Services">Service rendered (SO)</option>
+                    </select>
+                </label>
+                <label>Category
+                    <select @bind="_form.CategoryCode">
+                        <option value="">Select…</option>
+                        @foreach (var r in _routes.Where(r => r.Active))
+                        {
+                            <option value="@r.Code">@r.DisplayName — @r.ReviewerName</option>
+                        }
+                    </select>
+                </label>
+            </div>
+            @if (_form.SupplyType != SupplyType.Unknown)
+            {
+                <ChecklistEditor @ref="_intakeChecklist" @key="_form.SupplyType" Items="Checklist.ItemsFor(ChecklistStage.Intake, _form.SupplyType)" />
+                <button class="primary" disabled="@Busy" @onclick="RegisterAsync">Register</button>
+            }
+            else
+            {
+                <p class="muted">Choose the supply type to see the required documents.</p>
+            }
+        }
+
+        @if (_actions.Contains(CaseAction.SendForVerification))
+        {
+            <h3>Send for verification</h3>
+            <p class="muted">Routes the case to the Responsible Officer for @_case.CategoryCode with the SOP deadline.</p>
+            <button class="primary" disabled="@Busy" @onclick="SendForVerificationAsync">Send for verification</button>
+        }
+
+        @if (_actions.Contains(CaseAction.Verify))
+        {
+            <h3>Verify</h3>
+            <p class="muted">Check the invoice against the PO / SO, rates, quantities and signed receipt. If anything fails, return the case to the vendor with the reason instead.</p>
+            <ChecklistEditor @ref="_verifyChecklist" Items="Checklist.ItemsFor(ChecklistStage.Verification, _case.SupplyType)" />
+            <button class="primary" disabled="@Busy" @onclick="VerifyAsync">Reviewed and confirmed — OK for AP processing</button>
+        }
+
+        @if (_actions.Contains(CaseAction.AcceptForProcessing))
+        {
+            <h3>Accounts Payable</h3>
+            <button class="primary" disabled="@Busy" @onclick="AcceptAsync">Accept for processing</button>
+        }
+
+        @if (_actions.Contains(CaseAction.RecordErpEntry))
+        {
+            <h3>Record Business Central entry</h3>
+            <div class="inline-form">
+                <input placeholder="Purchase invoice no., e.g. PI-000123" @bind="_erpNumber" />
+                <button class="primary" disabled="@Busy" @onclick="RecordErpAsync">Save</button>
+            </div>
+        }
+
+        @if (_actions.Contains(CaseAction.Reassign))
+        {
+            <h3>Reassign reviewer</h3>
+            <p class="muted">Only the reviewer or delegates configured for this category can be chosen. To use someone else, the Finance Manager changes the routing first.</p>
+            <div class="inline-form">
+                <select @bind="_reassignId">
+                    <option value="">Select reviewer…</option>
+                    @foreach (var r in _reassignCandidates.Where(r => r.Id != _case.AssignedReviewerId))
+                    {
+                        <option value="@r.Id">@r.Name</option>
+                    }
+                </select>
+                <input placeholder="Reason" @bind="_reason" class="grow" />
+                <button disabled="@Busy" @onclick="ReassignAsync">Reassign</button>
+            </div>
+        }
+
+        @if (_actions.Contains(CaseAction.ReturnToVendor) || _actions.Contains(CaseAction.SendBackToReviewer) || _actions.Contains(CaseAction.Cancel))
+        {
+            <h3>Return, send back or cancel</h3>
+            <textarea rows="2" placeholder="Reason (sent to the vendor when returning) — required" @bind="_reason"></textarea>
+            <div class="button-row">
+                @if (_actions.Contains(CaseAction.ReturnToVendor)) { <button class="warn" disabled="@Busy" @onclick="ReturnAsync">Return to vendor</button> }
+                @if (_actions.Contains(CaseAction.SendBackToReviewer)) { <button class="warn" disabled="@Busy" @onclick="SendBackAsync">Send back to reviewer</button> }
+                @if (_actions.Contains(CaseAction.Cancel)) { <button class="danger" disabled="@Busy" @onclick="CancelAsync">Cancel case</button> }
+            </div>
+        }
+    </section>
+}
+
+<section class="panel">
+    <h2>History
+        @if (_chainValid) { <span class="badge badge-done" title="Every entry links to the one before it and none has been altered.">Audit chain verified</span> }
+        else { <span class="badge badge-cancelled">Audit chain check failed — report to ICT</span> }
+    </h2>
+    <table class="grid compact">
+        <thead><tr><th>When (WAT)</th><th>Action</th><th>By</th><th>Status</th><th>Reason / details</th></tr></thead>
+        <tbody>
+            @foreach (var e in _history.OrderByDescending(e => e.Sequence))
+            {
+                <tr>
+                    <td>@Format.Wat(e.OccurredAtUtc)</td>
+                    <td>@e.Action</td>
+                    <td>@e.ActorName</td>
+                    <td>@(e.FromStatus == e.ToStatus ? "" : $"{e.FromStatus} → {e.ToStatus}")</td>
+                    <td>@e.Reason</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private InvoiceCase? _case;
+    private bool _notFound;
+    private IReadOnlyList<AuditEvent> _history = [];
+    private bool _chainValid = true;
+    private IReadOnlyList<CategoryRoute> _routes = [];
+    private IReadOnlyList<CaseAction> _actions = [];
+    private readonly Dictionary<Guid, string> _flagNotes = [];
+    private readonly RegisterForm _form = new();
+    private ChecklistEditor? _intakeChecklist;
+    private ChecklistEditor? _verifyChecklist;
+    private string? _reason;
+    private string? _erpNumber;
+    private string? _reassignId;
+    private IReadOnlyList<(string Id, string Name)> _reassignCandidates = [];
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
+    private static ChecklistDefinition Checklist => DesiconInvoiceChecklist.Version1;
+
+    // Mirrors the domain rule so people only see buttons they can use; the domain still enforces it.
+    private bool CanResolve(CaseFlag f) => Me is not null && _case is not null && Me.Id != _case.RegisteredById
+        && (FlagCodes.RequiresFinanceManager(f)
+            ? Me.HasRole(VimRole.FinanceManager)
+            : Me.HasAnyRole([VimRole.FinanceManager, VimRole.DocumentController, VimRole.AccountsPayable]));
+
+    private sealed class RegisterForm
+    {
+        public string? VendorName { get; set; }
+        public string? VendorNo { get; set; }
+        public string? InvoiceNumber { get; set; }
+        public DateOnly? InvoiceDate { get; set; }
+        public decimal? Amount { get; set; }
+        public string Currency { get; set; } = "NGN";
+        public string? OrderNumber { get; set; }
+        public SupplyType SupplyType { get; set; }
+        public string? CategoryCode { get; set; }
+    }
+
+    protected override async Task LoadAsync()
+    {
+        await InScope(async sp =>
+        {
+            _case = await sp.GetRequiredService<ICaseRepository>().GetAsync(Id, default);
+            if (_case is null)
+            {
+                _notFound = true;
+                return;
+            }
+
+            _history = await sp.GetRequiredService<ICaseQueries>().GetAuditTrailAsync(Id, default);
+            _chainValid = AuditEvent.VerifyChain(_history.OrderBy(e => e.Sequence).ToList(), _case.LastAuditHash);
+            _routes = await sp.GetRequiredService<IRouteRepository>().ListAsync(default);
+            if (_case.Status == CaseStatus.UnderVerification)
+            {
+                _reassignCandidates = await sp.GetRequiredService<CaseWorkflowService>().ReassignCandidatesAsync(Id, default);
+            }
+        });
+
+        if (_case is not null && Me is not null)
+        {
+            _actions = _case.AvailableActionsFor(Me);
+            PrefillForm(_case);
+        }
+    }
+
+    private void PrefillForm(InvoiceCase c)
+    {
+        if (_form.VendorName is not null || c.Status != CaseStatus.Received)
+        {
+            return;
+        }
+
+        var x = c.ExtractedJson is null ? null : JsonSerializer.Deserialize<ExtractedInvoiceFields>(c.ExtractedJson, WebJson);
+        _form.VendorName = x?.VendorName ?? c.SenderName;
+        _form.InvoiceNumber = x?.InvoiceNumber;
+        _form.InvoiceDate = x?.InvoiceDate;
+        _form.Amount = x?.Amount;
+        _form.Currency = x?.Currency ?? "NGN";
+        _form.OrderNumber = x?.OrderNumber;
+    }
+
+    private CaseWorkflowService Wf(IServiceProvider sp) => sp.GetRequiredService<CaseWorkflowService>();
+
+    private Task RegisterAsync()
+    {
+        var details = new InvoiceDetails(
+            _form.VendorName ?? string.Empty, string.IsNullOrWhiteSpace(_form.VendorNo) ? null : _form.VendorNo,
+            _form.InvoiceNumber ?? string.Empty, _form.InvoiceDate ?? default, _form.Amount ?? 0, _form.Currency,
+            _form.OrderNumber ?? string.Empty, _form.SupplyType, _form.CategoryCode ?? string.Empty);
+        var answers = _intakeChecklist?.Responses ?? [];
+        return RunActionAsync(sp => Wf(sp).RegisterAsync(Id, details, answers, Me!, default), "Registered. Automated checks have run — review any flags.");
+    }
+
+    private Task SendForVerificationAsync() =>
+        RunActionAsync(sp => Wf(sp).SendForVerificationAsync(Id, Me!, default), "Sent to the Responsible Officer.");
+
+    private Task VerifyAsync()
+    {
+        var answers = _verifyChecklist?.Responses ?? [];
+        return RunActionAsync(sp => Wf(sp).VerifyAsync(Id, answers, Me!, default), "Verified. Accounts Payable has been notified.");
+    }
+
+    private Task AcceptAsync() => RunActionAsync(sp => Wf(sp).AcceptForProcessingAsync(Id, Me!, default), "Accepted for AP processing.");
+
+    private Task RecordErpAsync() => RunActionAsync(sp => Wf(sp).RecordErpEntryAsync(Id, _erpNumber ?? string.Empty, Me!, default), "Business Central document number recorded.");
+
+    private Task ReassignAsync() =>
+        RunActionAsync(sp => Wf(sp).ReassignAsync(Id, _reassignId ?? string.Empty, _reason ?? string.Empty, Me!, default), "Reassigned.");
+
+    private Task ReturnAsync() => RunActionAsync(sp => Wf(sp).ReturnToVendorAsync(Id, _reason ?? string.Empty, Me!, default), "Returned. The vendor will be emailed the reason.");
+
+    private Task SendBackAsync() => RunActionAsync(sp => Wf(sp).SendBackToReviewerAsync(Id, _reason ?? string.Empty, Me!, default), "Sent back to the reviewer.");
+
+    private Task CancelAsync() => RunActionAsync(sp => Wf(sp).CancelAsync(Id, _reason ?? string.Empty, Me!, default), "Case cancelled.");
+
+    private Task ResolveFlagAsync(Guid flagId) =>
+        RunActionAsync(sp => Wf(sp).ResolveFlagAsync(Id, flagId, _flagNotes.GetValueOrDefault(flagId) ?? string.Empty, Me!, default), "Flag cleared.");
+}

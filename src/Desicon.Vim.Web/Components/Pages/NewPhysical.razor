@@ -1,0 +1,62 @@
+@page "/cases/new-physical"
+@attribute [Authorize(Policy = Policies.DocumentController)]
+@inherits VimComponentBase
+@inject NavigationManager Nav
+
+<PageTitle>Log physical submission · Desicon VIM</PageTitle>
+<h1>Log a physical submission</h1>
+<p class="muted">For invoices delivered by hand. Scan the package to PDF first; it will join the same register as emailed invoices.</p>
+
+@if (Error is not null) { <div class="alert alert-error" role="alert">@Error</div> }
+
+<section class="panel">
+    <div class="form-grid">
+        <label>Vendor name<input @bind="_vendorName" /></label>
+        <label>Vendor email (for the acknowledgement)<input type="email" @bind="_vendorEmail" /></label>
+    </div>
+    <label class="block">Scanned PDF(s), max @MaxMb MB each
+        <InputFile OnChange="OnFiles" multiple accept="application/pdf" />
+    </label>
+    @if (_files.Count > 0)
+    {
+        <ul class="docs">@foreach (var f in _files) { <li>@f.Name <span class="muted">@(f.Size / 1024) KB</span></li> }</ul>
+    }
+    <button class="primary" disabled="@(Busy || _files.Count == 0 || string.IsNullOrWhiteSpace(_vendorName))" @onclick="SubmitAsync">Create case</button>
+</section>
+
+@code {
+    private const int MaxMb = 25;
+    private string? _vendorName;
+    private string? _vendorEmail;
+    private List<IBrowserFile> _files = [];
+
+    private void OnFiles(InputFileChangeEventArgs e)
+    {
+        Error = null;
+        _files = e.GetMultipleFiles(10).ToList();
+        if (_files.Any(f => !string.Equals(f.ContentType, "application/pdf", StringComparison.OrdinalIgnoreCase)))
+        {
+            Error = "Only PDF files are accepted.";
+            _files.Clear();
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        Guid? created = null;
+        var files = _files.Select(f => new CaseWorkflowService.ScannedFile(
+            f.Name, "application/pdf",
+            _ => Task.FromResult(f.OpenReadStream(MaxMb * 1024L * 1024L)))).ToList();
+
+        await RunActionAsync(async sp =>
+        {
+            var c = await sp.GetRequiredService<CaseWorkflowService>().ReceivePhysicalAsync(Me!, _vendorEmail, _vendorName!, files, default);
+            created = c.Id;
+        }, "Created.");
+
+        if (created is { } id)
+        {
+            Nav.NavigateTo($"cases/{id}");
+        }
+    }
+}

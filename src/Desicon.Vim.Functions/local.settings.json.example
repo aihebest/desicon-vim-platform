@@ -1,0 +1,33 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+
+    "MailboxIntakeSchedule": "0 */5 * * * *",
+    "SlaMonitorSchedule": "0 */15 * * * *",
+    "OutboxDispatchSchedule": "0 * * * * *",
+    "ScanResultSyncSchedule": "30 * * * * *",
+
+    "ConnectionStrings:VimDb": "Server=localhost,1433;Database=VimDev;User Id=sa;Password=<your local SA password from .env>;TrustServerCertificate=True;Encrypt=True",
+
+    "Storage:ConnectionString": "UseDevelopmentStorage=true",
+    "Storage:DocumentsContainer": "case-documents",
+
+    "Mailbox:UserId": "<dev mailbox UPN, e.g. vim-dev-invoices@yourtenant.onmicrosoft.com>",
+    "Mailbox:ProcessedFolderName": "Processed",
+
+    "Vim:WorkbenchUrl": "https://localhost:5001",
+    "Vim:FinanceManagerEmail": "",
+    "Vim:AccountsPayableEmail": "",
+
+    "DocumentIntelligence:Endpoint": "",
+
+    "BusinessCentral:Enabled": "false",
+    "BusinessCentral:TenantId": "",
+    "BusinessCentral:ClientId": "",
+    "BusinessCentral:ClientSecret": "",
+    "BusinessCentral:Environment": "Sandbox",
+    "BusinessCentral:CompanyId": ""
+  }
+}

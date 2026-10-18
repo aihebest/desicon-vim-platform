@@ -1,0 +1,145 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.8",
+  "variables": {
+    "environment": {
+      "value": "prod"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.storage.azurerm_storage_account.this",
+      "module_address": "module.storage",
+      "type": "azurerm_storage_account",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "allow_nested_items_to_be_public": false,
+          "shared_access_key_enabled": false,
+          "https_traffic_only_enabled": true,
+          "min_tls_version": "TLS1_2",
+          "public_network_access_enabled": false
+        }
+      }
+    },
+    {
+      "address": "module.storage.azurerm_storage_container.documents",
+      "module_address": "module.storage",
+      "type": "azurerm_storage_container",
+      "name": "documents",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "container_access_type": "private",
+          "name": "case-documents"
+        }
+      }
+    },
+    {
+      "address": "module.sql.azurerm_mssql_server.this",
+      "module_address": "module.sql",
+      "type": "azurerm_mssql_server",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "minimum_tls_version": "1.2",
+          "administrator_login": null,
+          "public_network_access_enabled": false,
+          "azuread_administrator": [
+            {
+              "azuread_authentication_only": true,
+              "login_username": "grp-vim-sql-admins-prod"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "address": "module.keyvault.azurerm_key_vault.this",
+      "module_address": "module.keyvault",
+      "type": "azurerm_key_vault",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "purge_protection_enabled": true,
+          "rbac_authorization_enabled": true,
+          "public_network_access_enabled": false
+        }
+      }
+    },
+    {
+      "address": "module.docintel.azurerm_cognitive_account.this",
+      "module_address": "module.docintel",
+      "type": "azurerm_cognitive_account",
+      "name": "this",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "local_auth_enabled": false,
+          "public_network_access_enabled": false,
+          "kind": "FormRecognizer"
+        }
+      }
+    },
+    {
+      "address": "module.app_hosting.azurerm_linux_web_app.web",
+      "module_address": "module.app_hosting",
+      "type": "azurerm_linux_web_app",
+      "name": "web",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "https_only": true,
+          "site_config": [
+            {
+              "minimum_tls_version": "1.2",
+              "ftps_state": "Disabled"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "address": "module.app_hosting.azurerm_linux_function_app.func",
+      "module_address": "module.app_hosting",
+      "type": "azurerm_linux_function_app",
+      "name": "func",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "https_only": true,
+          "site_config": [
+            {
+              "minimum_tls_version": "1.2",
+              "ftps_state": "Disabled"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

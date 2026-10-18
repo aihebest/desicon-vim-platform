@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Adapters ("infrastructure") for the ports declared in Desicon.Vim.Application:
+    Azure SQL (EF Core), Blob Storage, Document Intelligence, Business Central,
+    and Microsoft Graph (invoice mailbox + outbound email).
+  -->
+  <PropertyGroup>
+    <RootNamespace>Desicon.Vim.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Options, configuration binding, HttpClientFactory, logging and health checks come from the shared framework. -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <InternalsVisibleTo Include="Desicon.Vim.Infrastructure.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
+    <PackageReference Include="Azure.Identity" Version="1.21.0" />
+    <PackageReference Include="Azure.Storage.Blobs" Version="12.24.0" />
+    <PackageReference Include="Azure.AI.DocumentIntelligence" Version="1.0.0" />
+    <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
+    <!-- Direct references lift vulnerable transitive versions (NU1902/NU1903). Pinned to the versions the first green CI run resolved; Dependabot proposes updates. -->
+    <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Desicon.Vim.Application\Desicon.Vim.Application.csproj" />
+  </ItemGroup>
+</Project>

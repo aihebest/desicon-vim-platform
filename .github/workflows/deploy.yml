@@ -1,0 +1,158 @@
+# =============================================================================
+# Deploy -- Desicon VIM Platform
+#
+# Push to main (or run manually) => build once => dev => uat => prod.
+#
+#   build     publish Desicon.Vim.Web, Desicon.Vim.Functions and an EF Core
+#             migration bundle ONCE; every environment deploys the same bits.
+#   dev/uat/prod   each calls deploy-environment.yml, which runs:
+#       plan    (GitHub environment "<env>-plan", no approval)
+#               terraform plan + OPA policy gate; plan shown in the job summary
+#       deploy  (GitHub environment "<env>", PROTECTION RULES APPLY HERE)
+#               terraform apply of exactly that saved plan -> EF migrations
+#               (separate migration identity) -> deploy web + functions -> GET /health
+#
+# Protect "prod" (and ideally "uat") in Settings > Environments with
+# "Required reviewers". The reviewer sees the prod plan in the summary of the
+# prod plan job before approving. See docs/operations/infrastructure.md.
+#
+# Authentication: OIDC only (azure/login with client-id/tenant-id/
+# subscription-id from GitHub Environment VARIABLES). No Azure secret exists
+# in this repository or in GitHub.
+#
+# !!! Pin every `uses:` to a commit SHA before relying on this -- see the
+# !!! banner in ci.yml and docs/operations/infrastructure.md.
+# =============================================================================
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      stop_after:
+        description: "Last environment to deploy to"
+        type: choice
+        options: [dev, uat, prod]
+        default: prod
+      infra_only:
+        description: "Terraform only (skip migrations and app deployment). Used once per environment during bootstrap."
+        type: boolean
+        default: false
+
+permissions: {}
+
+# Never cancel a deployment part-way through a terraform apply or migration.
+# A newer push waits for the running one to finish.
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore Desicon.Vim.sln
+
+      - name: Publish web
+        run: dotnet publish src/Desicon.Vim.Web/Desicon.Vim.Web.csproj -c Release --no-restore -o out/web
+
+      - name: Publish functions
+        run: dotnet publish src/Desicon.Vim.Functions/Desicon.Vim.Functions.csproj -c Release --no-restore -o out/functions
+
+      # A migration bundle is a single executable containing every EF Core
+      # migration. The deploy job runs it against the database; no SDK, no
+      # source code and no `dotnet ef` needed there. Built for linux-x64 (the
+      # deploy runner's platform).
+      - name: Build EF Core migration bundle
+        run: |
+          dotnet tool install --global dotnet-ef --version "10.0.*"
+          dotnet ef migrations bundle \
+            --project src/Desicon.Vim.Infrastructure/Desicon.Vim.Infrastructure.csproj \
+            --startup-project src/Desicon.Vim.Infrastructure/Desicon.Vim.Infrastructure.csproj \
+            --context VimDbContext \
+            --configuration Release \
+            --self-contained --target-runtime linux-x64 \
+            --output out/efbundle/efbundle \
+            --force
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: out/web
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: functions
+          path: out/functions
+          retention-days: 7
+          if-no-files-found: error
+          include-hidden-files: true # functions publish output contains .azurefunctions/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: efbundle
+          path: out/efbundle
+          retention-days: 7
+          if-no-files-found: error
+
+  dev:
+    name: dev
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: dev
+      runner: ubuntu-latest
+      infra_only: ${{ inputs.infra_only == true }}
+
+  uat:
+    name: uat
+    needs: dev
+    if: ${{ github.event_name == 'push' || inputs.stop_after != 'dev' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: uat
+      runner: ubuntu-latest
+      infra_only: ${{ inputs.infra_only == true }}
+
+  prod:
+    name: prod
+    needs: uat
+    if: ${{ github.event_name == 'push' || inputs.stop_after == 'prod' }}
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/deploy-environment.yml
+    with:
+      environment: prod
+      # prod has private networking: SQL has no public endpoint, so the
+      # migration step must run on a runner INSIDE the VNet (a Linux x64
+      # self-hosted runner). Set the repository variable PROD_RUNNER_LABEL to
+      # that runner's label. Until then this falls back to a GitHub-hosted
+      # runner, and the migration step will fail to reach SQL.
+      runner: ${{ vars.PROD_RUNNER_LABEL || 'ubuntu-latest' }}
+      infra_only: ${{ inputs.infra_only == true }}

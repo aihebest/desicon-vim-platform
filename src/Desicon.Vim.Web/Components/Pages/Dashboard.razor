@@ -1,0 +1,76 @@
+@page "/"
+@inherits VimComponentBase
+
+<PageTitle>Dashboard · Desicon VIM</PageTitle>
+<h1>Dashboard</h1>
+
+@if (_figures is null)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    <section class="tiles">
+        <a class="tile @(_figures.OverdueCount > 0 ? "tile-alert" : "")" href="cases?overdue=true">
+            <div class="tile-value">@_figures.OverdueCount</div>
+            <div class="tile-label">Overdue reviews</div>
+        </a>
+        <div class="tile">
+            <div class="tile-value">@_figures.ReceivedLast30Days</div>
+            <div class="tile-label">Received, last 30 days</div>
+        </div>
+        <div class="tile">
+            <div class="tile-value">@Hours(_figures.AverageHoursReceiptToVerified)</div>
+            <div class="tile-label">Avg. receipt → verified</div>
+        </div>
+        <div class="tile">
+            <div class="tile-value">@Hours(_figures.AverageHoursVerifiedToErp)</div>
+            <div class="tile-label">Avg. verified → in ERP</div>
+        </div>
+    </section>
+
+    <div class="two-col">
+        <section class="panel">
+            <h2>Cases by stage</h2>
+            <table class="grid compact">
+                <tbody>
+                    @foreach (var s in _figures.ByStatus.Where(s => s.Count > 0).OrderBy(s => s.Status))
+                    {
+                        <tr>
+                            <td><StatusBadge Status="s.Status" /></td>
+                            <td class="num"><a href="cases?status=@s.Status">@s.Count</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+        <section class="panel">
+            <h2>Top reasons for return</h2>
+            @if (_figures.TopReturnReasons.Count == 0)
+            {
+                <p class="muted">No returns recorded yet.</p>
+            }
+            else
+            {
+                <table class="grid compact">
+                    <tbody>
+                        @foreach (var r in _figures.TopReturnReasons)
+                        {
+                            <tr><td>@r.Reason</td><td class="num">@r.Count</td></tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private DashboardFigures? _figures;
+
+    protected override async Task LoadAsync() =>
+        _figures = await InScope(sp => sp.GetRequiredService<ICaseQueries>().GetDashboardAsync(DateTimeOffset.UtcNow, default));
+
+    private static string Hours(double? h) =>
+        h is null ? "—" : h < 48 ? string.Create(CultureInfo.InvariantCulture, $"{h:0.#} h") : string.Create(CultureInfo.InvariantCulture, $"{h / 24:0.#} d");
+}

@@ -1,0 +1,20 @@
+# Terraform working files -- never commit these.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+tfplan
+*.tfplan
+plan.json
+
+# Per-person / per-environment values. Commit only the *.example files.
+**/backend.hcl
+*.auto.tfvars
+*.tfvars
+!*.tfvars.example
+!*.auto.tfvars.example
+
+# DO commit .terraform.lock.hcl (it pins provider checksums). Generate it with
+#   terraform providers lock -platform=linux_amd64 -platform=windows_amd64
+# in each environments/<env> folder -- see docs/operations/infrastructure.md.

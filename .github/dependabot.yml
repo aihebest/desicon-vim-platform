@@ -1,0 +1,82 @@
+# Dependabot -- weekly update pull requests for the three things this
+# repository depends on.
+#
+# github-actions matters most: once the workflows are SHA-pinned (see the
+# banner in .github/workflows/ci.yml), a pin never picks up a security fix on
+# its own. Dependabot understands "uses: owner/action@<sha> # v4" and bumps
+# both the SHA and the comment.
+#
+# Note: an `ignore` rule only stops FUTURE pull requests. If you add one,
+# close the already-open PR it was written for by hand.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(actions)"
+    labels: [dependencies, github-actions]
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    commit-message:
+      prefix: "chore(deps)"
+    labels: [dependencies, nuget]
+    groups:
+      # Packages that are versioned together; a partial bump fails restore.
+      entity-framework:
+        patterns: ["Microsoft.EntityFrameworkCore*"]
+      azure-functions:
+        patterns: ["Microsoft.Azure.Functions.Worker*"]
+      identity-web:
+        patterns: ["Microsoft.Identity.Web*"]
+      azure-sdk:
+        patterns: ["Azure.*"]
+      test:
+        patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "coverlet*"]
+    ignore:
+      # Major versions are deliberate migrations (new .NET, new Functions
+      # host contract, new telemetry SDK), not Monday-morning merges.
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Azure.Functions.Worker*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.ApplicationInsights*"
+        update-types: ["version-update:semver-major"]
+
+  # One entry per Terraform root and module directory: Dependabot does not
+  # recurse. It bumps provider constraints in required_providers.
+  - package-ecosystem: terraform
+    directories:
+      - /infra/terraform/environments/dev
+      - /infra/terraform/environments/uat
+      - /infra/terraform/environments/prod
+      - /infra/terraform/modules/*
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(terraform)"
+    labels: [dependencies, terraform]
+    groups:
+      terraform-providers:
+        patterns: ["*"]
+    ignore:
+      # azurerm 5.x is a major release with breaking changes; upgrade on
+      # purpose with its upgrade guide open, in all roots and modules at once.
+      - dependency-name: "hashicorp/azurerm"
+        update-types: ["version-update:semver-major"]

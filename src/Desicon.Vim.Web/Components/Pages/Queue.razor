@@ -1,0 +1,66 @@
+@page "/queue"
+@inherits VimComponentBase
+
+<PageTitle>My queue · Desicon VIM</PageTitle>
+<h1>My queue</h1>
+<p class="muted">Work waiting for you, based on your role.</p>
+
+@foreach (var queue in _sections)
+{
+    <section class="panel">
+        <h2>@queue.Title <span class="count">@queue.Result.TotalCount</span></h2>
+        <CaseTable Items="queue.Result.Items" EmptyText="@queue.Empty" />
+    </section>
+}
+@if (_sections.Count == 0 && Me is not null)
+{
+    <p class="muted">Your role has no work queue. Use <a href="cases">All cases</a> to search.</p>
+}
+
+@code {
+    private sealed record Section(string Title, string Empty, PagedResult<CaseSummary> Result);
+
+    private readonly List<Section> _sections = [];
+
+    protected override async Task LoadAsync()
+    {
+        _sections.Clear();
+        if (Me is null)
+        {
+            return;
+        }
+
+        var me = Me;
+        await InScope(async sp =>
+        {
+            var q = sp.GetRequiredService<ICaseQueries>();
+            if (me.HasRole(VimRole.DocumentController))
+            {
+                _sections.Add(new("New submissions to register", "No new submissions.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Received], PageSize: 50), default)));
+                _sections.Add(new("Registered, to send for verification", "Nothing waiting.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Registered], PageSize: 50), default)));
+            }
+
+            if (me.HasRole(VimRole.Reviewer))
+            {
+                _sections.Add(new("Assigned to me for verification", "Nothing assigned to you.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.UnderVerification], AssignedReviewerId: me.Id, PageSize: 50), default)));
+            }
+
+            if (me.HasRole(VimRole.AccountsPayable))
+            {
+                _sections.Add(new("Verified, ready for AP", "Nothing verified yet.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Verified], PageSize: 50), default)));
+                _sections.Add(new("In AP processing", "Nothing in progress.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.WithAccountsPayable], PageSize: 50), default)));
+            }
+
+            if (me.HasRole(VimRole.FinanceManager))
+            {
+                _sections.Add(new("Overdue reviews", "No overdue reviews.",
+                    await q.SearchAsync(new CaseSearch(OverdueOnly: true, PageSize: 50), default)));
+            }
+        });
+    }
+}
