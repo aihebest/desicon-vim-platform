@@ -103,7 +103,8 @@ $roles = @(
 }
 
 $rolesFile = Join-Path ([IO.Path]::GetTempPath()) "vim-app-roles-$Environment.json"
-$roles | ConvertTo-Json -Depth 5 | Set-Content -Path $rolesFile -Encoding utf8
+# WriteAllText: UTF-8 without a BOM (Set-Content -Encoding utf8 adds one in 5.1).
+[IO.File]::WriteAllText($rolesFile, (ConvertTo-Json -InputObject @($roles) -Depth 5))
 
 $redirectUris = @($WebAppUrls + $LocalDevUrls | ForEach-Object { $_.TrimEnd('/') + '/signin-oidc' })
 
@@ -159,8 +160,8 @@ foreach ($roleValue in $RoleGroups.Keys) {
         --query "value[?principalId=='$groupId' && appRoleId=='$($role.id)'] | length(@)" -o tsv
     if ($already -eq '0') {
         $bodyFile = Join-Path ([IO.Path]::GetTempPath()) "vim-role-assignment.json"
-        @{ principalId = $groupId; resourceId = $spId; appRoleId = $role.id } |
-            ConvertTo-Json | Set-Content -Path $bodyFile -Encoding utf8
+        [IO.File]::WriteAllText($bodyFile,
+            (@{ principalId = $groupId; resourceId = $spId; appRoleId = $role.id } | ConvertTo-Json))
         az rest --method POST `
             --url "https://graph.microsoft.com/v1.0/servicePrincipals/$spId/appRoleAssignedTo" `
             --headers "Content-Type=application/json" --body "@$bodyFile" | Out-Null

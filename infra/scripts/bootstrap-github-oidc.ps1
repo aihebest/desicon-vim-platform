@@ -78,21 +78,24 @@ function Add-FederatedCredential([string] $appId, [string] $credName, [string] $
     $exists = az ad app federated-credential list --id $appId --query "[?name=='$credName'] | length(@)" -o tsv
     if ($exists -ne '0') { Write-Host "  Federated credential $credName exists"; return }
     $file = Join-Path ([IO.Path]::GetTempPath()) "fic-$credName.json"
-    @{
+    $json = @{
         name        = $credName
         issuer      = $issuer
         subject     = $subject
         description = "GitHub Actions: $subject"
         audiences   = @('api://AzureADTokenExchange')
-    } | ConvertTo-Json | Set-Content -Path $file -Encoding utf8
+    } | ConvertTo-Json
+    # WriteAllText: UTF-8 without a BOM (Set-Content -Encoding utf8 adds one in 5.1).
+    [IO.File]::WriteAllText($file, $json)
     az ad app federated-credential create --id $appId --parameters "@$file" | Out-Null
     Remove-Item $file -ErrorAction SilentlyContinue
     Write-Host "  Trusts: $subject"
 }
 
 function Add-RoleIfMissing([string] $spId, [string] $role, [string] $scope, [string] $condition = $null) {
-    $has = az role assignment list --assignee $spId --scope $scope --role $role --query "length(@)" -o tsv
-    if ($has -ne '0') { Write-Host "  Has '$role'"; return }
+    # No parentheses in --query: az is az.cmd on Windows and cmd.exe mis-parses them.
+    $has = az role assignment list --assignee $spId --scope $scope --role $role --query "[].id" -o tsv
+    if ($has) { Write-Host "  Has '$role'"; return }
     $azArgs = @('role', 'assignment', 'create', '--assignee-object-id', $spId,
         '--assignee-principal-type', 'ServicePrincipal', '--role', $role, '--scope', $scope)
     if ($condition) { $azArgs += @('--condition', $condition, '--condition-version', '2.0') }

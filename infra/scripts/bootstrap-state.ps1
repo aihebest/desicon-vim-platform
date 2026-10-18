@@ -52,7 +52,10 @@ Write-Host "Subscription: $(az account show --query name -o tsv) ($subscriptionI
 
 # Re-use an existing state account in this resource group if there is one, so
 # a re-run does not create a second account with a different random name.
-$existing = az storage account list -g $ResourceGroupName --query "[?starts_with(name, 'stvimtfstate')].name | [0]" -o tsv 2>$null
+$existing = $null
+if ((az group exists -n $ResourceGroupName) -eq 'true') {
+    $existing = az storage account list -g $ResourceGroupName --query "[?starts_with(name, 'stvimtfstate')].name | [0]" -o tsv
+}
 if ($existing) {
     Write-Host "Found existing state account $existing; re-using it."
     $StorageAccountName = $existing
@@ -79,18 +82,23 @@ az storage account blob-service-properties update -n $StorageAccountName -g $Res
 Write-Host "4/5 Granting you 'Storage Blob Data Contributor'..."
 $me = az ad signed-in-user show --query id -o tsv
 $scope = az storage account show -n $StorageAccountName -g $ResourceGroupName --query id -o tsv
-$hasRole = az role assignment list --assignee $me --scope $scope --role "Storage Blob Data Contributor" --query "length(@)" -o tsv
-if ($hasRole -eq '0') {
+# No parentheses in --query: az is az.cmd on Windows and cmd.exe mis-parses them.
+$hasRole = az role assignment list --assignee $me --scope $scope --role "Storage Blob Data Contributor" --query "[].id" -o tsv
+if (-not $hasRole) {
     az role assignment create --assignee-object-id $me --assignee-principal-type User `
         --role "Storage Blob Data Contributor" --scope $scope | Out-Null
 }
 
 Write-Host "5/5 Container '$container' (waiting for the role to take effect; can take a few minutes)..."
 $created = $false
+# Expected to fail until the role assignment propagates; in Windows PowerShell
+# 5.1 a native command's stderr is a terminating error under 'Stop', so relax it.
+$ErrorActionPreference = 'Continue'
 for ($i = 1; $i -le 12 -and -not $created; $i++) {
     az storage container create --name $container --account-name $StorageAccountName --auth-mode login 2>$null | Out-Null
     if ($LASTEXITCODE -eq 0) { $created = $true } else { Start-Sleep -Seconds 20 }
 }
+$ErrorActionPreference = 'Stop'
 if (-not $created) { throw "Could not create the container yet. Wait a few minutes and re-run this script." }
 
 Write-Host ""
