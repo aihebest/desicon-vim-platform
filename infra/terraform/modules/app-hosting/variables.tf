@@ -131,7 +131,7 @@ variable "entra_workbench_client_id" {
 }
 
 variable "mailbox_user_id" {
-  description = "UPN of the shared invoice mailbox the function app reads (Mailbox__UserId), e.g. invoices@desicongroup.com."
+  description = "UPN of the shared invoice mailbox the function app reads (Mailbox__UserId), e.g. invoices@example.com."
   type        = string
 }
 

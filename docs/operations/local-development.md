@@ -154,7 +154,7 @@ emulator. Do **not** point a development machine at the production invoice
 mailbox. Instead:
 
 1. Ask the Microsoft 365 administrator for a **dedicated test shared
-   mailbox** (e.g. `vim-dev-invoices@desicongroup.com`), or use a free
+   mailbox** (e.g. `vim-dev-invoices@example.com`), or use a free
    Microsoft 365 developer tenant.
 2. Create a **development app registration** in Entra ID with the Graph
    *application* permissions `Mail.ReadWrite` and `Mail.Send`, limited to the

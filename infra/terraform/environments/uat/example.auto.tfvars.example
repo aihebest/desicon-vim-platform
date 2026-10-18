@@ -26,7 +26,7 @@ business_central_company_id  = "00000000-0000-0000-0000-000000000000"
 business_central_client_id   = "00000000-0000-0000-0000-000000000000"
 
 # Shared mailbox the function app reads invoices from.
-mailbox_user_id = "invoices-test@desicongroup.com"
+mailbox_user_id = "invoices-test@example.com"
 
 # Your PC's public IP, only if you need to run create-sql-users.sql from it
 # while the SQL public endpoint is on. Find it with:

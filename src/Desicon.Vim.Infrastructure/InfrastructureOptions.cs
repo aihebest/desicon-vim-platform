@@ -29,7 +29,7 @@ public sealed class MailboxOptions
 {
     public const string SectionName = "Mailbox";
 
-    /// <summary>UPN or Entra object id of the mailbox, e.g. invoices@desicongroup.com. Notifications are sent from it too.</summary>
+    /// <summary>UPN or Entra object id of the mailbox, e.g. invoices@example.com. Notifications are sent from it too.</summary>
     public string? UserId { get; set; }
 
     /// <summary>Folder (directly under the mailbox root) that processed messages are moved to. Created if missing.</summary>

@@ -33,8 +33,8 @@
         terraform output -raw function_app_principal_id
 
 .PARAMETER MailboxAddress
-    The shared invoice mailbox, e.g. invoices@desicongroup.com (prod) or
-    invoices-test@desicongroup.com (dev/uat). Must match Mailbox__UserId.
+    The shared invoice mailbox, e.g. invoices@example.com (prod) or
+    invoices-test@example.com (dev/uat). Must match Mailbox__UserId.
 
 .PARAMETER Environment
     dev, uat or prod. Used only to give the Exchange objects readable names.
@@ -45,8 +45,8 @@
 
 .EXAMPLE
     .\grant-mailbox-access.ps1 -FunctionAppPrincipalId 11111111-2222-3333-4444-555555555555 `
-        -MailboxAddress invoices-test@desicongroup.com -Environment dev `
-        -TestMailboxAddress someone.else@desicongroup.com
+        -MailboxAddress invoices-test@example.com -Environment dev `
+        -TestMailboxAddress someone.else@example.com
 
 .NOTES
     Requirements (one-time, Windows PowerShell 5.1 or PowerShell 7):
