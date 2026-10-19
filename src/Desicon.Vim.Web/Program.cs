@@ -1,10 +1,12 @@
 using Desicon.Vim.Application;
 using Desicon.Vim.Infrastructure;
+using Desicon.Vim.Infrastructure.Erp;
 using Desicon.Vim.Web.Components;
 using Desicon.Vim.Web.Endpoints;
 using Desicon.Vim.Web.Security;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 
@@ -52,7 +54,18 @@ app.UseAntiforgery();
 app.MapStaticAssets().AllowAnonymous();
 app.MapControllers();
 app.MapRazorPages();
-app.MapHealthChecks("/health").AllowAnonymous();
+// Public probe (deployment smoke test, App Service): app, database and storage only.
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    Predicate = c => !c.Tags.Contains(BusinessCentralHealthCheck.Tag),
+}).AllowAnonymous();
+
+// Business Central connection test, for admins: sign in, then open /health/bc.
+app.MapHealthChecks("/health/bc", new HealthCheckOptions
+{
+    Predicate = c => c.Tags.Contains(BusinessCentralHealthCheck.Tag),
+    ResponseWriter = HealthReportWriter.WriteAsync,
+}).RequireAuthorization(Policies.Administration);
 app.MapVimDocuments();
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
