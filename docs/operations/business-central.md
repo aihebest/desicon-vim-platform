@@ -71,8 +71,12 @@ gateway is used and the workflow runs without BC checks.
    State = Enabled, permission set **D365 READ**, company Desicon Engineering Ltd.
    Never SUPER or a write permission set.
 5. Set GitHub variables on `<env>-plan` and `<env>`: `BC_TENANT_ID = desiconerp.com`,
-   `BC_ENVIRONMENT = Sandbox` (or `Production`), `BC_CLIENT_ID = <client id>`.
-   Then set `vim_settings.business_central_enabled = true` and deploy.
+   `BC_ENVIRONMENT = <exact environment name>` (dev uses `ProdCopy-April2026`;
+   prod uses `Production`), `BC_CLIENT_ID = <client id>`, then deploy.
+   Setting `BC_CLIENT_ID` is what switches the checks on; leave it empty to keep them off.
+6. Test the connection: sign in to the workbench as Finance Manager or Platform Admin
+   and open `/health/bc`. `Healthy` shows the company found; `Unhealthy` shows the
+   error from Entra or Business Central. The public `/health` probe never calls BC.
 
 If BC answers 403 for a page added by a Desicon extension, the extension's own
 read permission set may also be needed (the same note as in DCCP's setup guide).

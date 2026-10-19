@@ -37,6 +37,8 @@ terraform {
 }
 
 locals {
+  # Business Central checks switch on once the connector's client ID is set
+  # (GitHub variable BC_CLIENT_ID), or when vim_settings forces them on.
   # Settings both apps read. Keys use "__" because Linux App Service does not
   # allow ":" in setting names; .NET configuration maps "__" back to ":".
   shared_app_settings = {
@@ -51,7 +53,7 @@ locals {
     "BusinessCentral__ClientId"      = var.business_central.client_id
     "BusinessCentral__CompanyName"   = var.business_central.company_name
     "BusinessCentral__AuthMode"      = "Federated"
-    "BusinessCentral__Enabled"       = tostring(var.vim_settings.business_central_enabled)
+    "BusinessCentral__Enabled"       = tostring(var.vim_settings.business_central_enabled || trimspace(var.business_central.client_id) != "")
     "Vim__WorkbenchUrl"              = coalesce(var.vim_settings.workbench_url, "https://${var.web_app_name}.azurewebsites.net")
     "Vim__FinanceManagerEmail"       = var.vim_settings.finance_manager_email
     "Vim__AccountsPayableEmail"      = var.vim_settings.accounts_payable_email

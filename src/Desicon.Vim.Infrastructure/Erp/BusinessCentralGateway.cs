@@ -127,6 +127,19 @@ public sealed class BusinessCentralGateway(
         // Not available from the standard API v2.0; requires a custom API page (Phase 2).
         BankAccountNumbers: []);
 
+    /// <summary>
+    /// Reads the company and one vendor, to prove sign-in and the D365 READ permission.
+    /// Returns a one-line description for the admin health page.
+    /// </summary>
+    internal async Task<string> TestConnectionAsync(CancellationToken ct)
+    {
+        var companyId = await company.GetIdAsync(this, ct).ConfigureAwait(false);
+        var vendors = await GetRawListAsync<BcVendor>($"companies({companyId})/vendors?$top=1&$select=number", ct).ConfigureAwait(false);
+        var o = options.Value;
+        return $"Connected to Business Central environment '{o.Environment}', company '{o.CompanyName}' ({companyId}). " +
+               (vendors.Count == 0 ? "No vendors were returned: check the D365 READ permission set." : "Vendor records can be read.");
+    }
+
     private async Task<IReadOnlyList<T>> GetListAsync<T>(string relativeUrl, CancellationToken ct)
     {
         var companyId = await company.GetIdAsync(this, ct).ConfigureAwait(false);

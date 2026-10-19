@@ -137,7 +137,8 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(services);
         return services.AddHealthChecks()
             .AddDbContextCheck<VimDbContext>("sql", tags: ReadyTags)
-            .AddCheck<BlobStorageHealthCheck>("blob", tags: ReadyTags);
+            .AddCheck<BlobStorageHealthCheck>("blob", tags: ReadyTags)
+            .AddCheck<BusinessCentralHealthCheck>("business-central", tags: [BusinessCentralHealthCheck.Tag]);
     }
 
     /// <summary>
