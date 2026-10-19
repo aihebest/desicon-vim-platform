@@ -372,10 +372,31 @@ jobs:
         run: |
           url="${{ steps.tfout.outputs.web_app_url }}/health"
           echo "Checking $url"
-          curl --fail --silent --show-error --max-time 30 \
-               --retry 12 --retry-delay 15 --retry-all-errors "$url"
-          echo
+          # A cold start on the small dev plan takes ~1.5-3 min (longer while the
+          # serverless database wakes up), so allow up to ~20 minutes.
+          ok=0
+          for i in $(seq 1 30); do
+            code=$(curl --silent --output /tmp/health.txt --write-out '%{http_code}' --max-time 30 "$url" || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then ok=1; cat /tmp/health.txt; echo; break; fi
+            sleep 10
+          done
+          [ "$ok" = "1" ] || { echo "::error::$url did not return 200. See the next step for the app's own log."; exit 1; }
           state=$(az functionapp show -g "${{ steps.tfout.outputs.resource_group }}" \
                     -n "${{ steps.tfout.outputs.function_app_name }}" --query state -o tsv)
           echo "Function app state: $state"
           [ "$state" = "Running" ]
+
+      # If the app did not come up, pull its container log and surface the error
+      # lines as annotations, so the cause is visible on the run's summary page.
+      - name: Show web app startup errors
+        if: ${{ failure() && !inputs.infra_only }}
+        run: |
+          rg="${{ steps.tfout.outputs.resource_group }}"; app="${{ steps.tfout.outputs.web_app_name }}"
+          az webapp log download -g "$rg" -n "$app" --log-file /tmp/weblogs.zip --output none || exit 0
+          mkdir -p /tmp/weblogs && unzip -oq /tmp/weblogs.zip -d /tmp/weblogs || exit 0
+          log=$(ls -t $(find /tmp/weblogs -name '*_default_docker.log') 2>/dev/null | head -1)
+          [ -n "$log" ] || { echo "No container log found."; exit 0; }
+          echo "--- last 80 lines of $(basename "$log") ---"; tail -n 80 "$log"
+          grep -E "Unhandled exception|Exception:|fail:|crit:|Error Number|Login failed|exited with code" "$log" \
+            | tail -n 15 | cut -c1-400 | sed 's/^/::error title=Web app log::/' || true
