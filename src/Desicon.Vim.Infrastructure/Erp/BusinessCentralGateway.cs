@@ -4,6 +4,7 @@ using System.Text.Json;
 using Azure.Core;
 using Azure.Identity;
 using Desicon.Vim.Application.Abstractions;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -12,6 +13,7 @@ namespace Desicon.Vim.Infrastructure.Erp;
 /// <summary>
 /// Read-only Business Central adapter over the standard API v2.0
 /// (https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/v2.0/companies({id})/).
+/// The company id is configured, or looked up once by name (<see cref="BusinessCentralCompany"/>).
 /// The platform never creates, posts or pays anything in Business Central.
 /// Assumptions are listed in docs/operations/business-central.md:
 /// <list type="bullet">
@@ -27,6 +29,7 @@ namespace Desicon.Vim.Infrastructure.Erp;
 public sealed class BusinessCentralGateway(
     HttpClient http,
     IOptions<BusinessCentralOptions> options,
+    BusinessCentralCompany company,
     ILogger<BusinessCentralGateway> logger) : IErpGateway
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
@@ -126,7 +129,17 @@ public sealed class BusinessCentralGateway(
 
     private async Task<IReadOnlyList<T>> GetListAsync<T>(string relativeUrl, CancellationToken ct)
     {
-        using var response = await http.GetAsync(new Uri(relativeUrl, UriKind.Relative), ct).ConfigureAwait(false);
+        var companyId = await company.GetIdAsync(this, ct).ConfigureAwait(false);
+        return await GetRawListAsync<T>($"companies({companyId})/{relativeUrl}", ct).ConfigureAwait(false);
+    }
+
+    /// <summary>GET relative to .../api/v2.0/ (no company segment).</summary>
+    internal async Task<IReadOnlyList<T>> GetRawListAsync<T>(string relativeUrl, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(relativeUrl, UriKind.Relative));
+        // Ask BC to serve the request from a read-only replica where it has one.
+        request.Headers.Add("Data-Access-Intent", "ReadOnly");
+        using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
@@ -145,6 +158,13 @@ public sealed class BusinessCentralGateway(
     private sealed class ODataList<T>
     {
         public List<T>? Value { get; set; }
+    }
+
+    internal sealed class BcCompany
+    {
+        public Guid Id { get; set; }
+
+        public string? Name { get; set; }
     }
 
     private sealed class BcVendor
@@ -216,21 +236,78 @@ public sealed class DisabledErpGateway : IErpGateway
         Task.FromResult<ErpPaymentStatus?>(null);
 }
 
-/// <summary>Holds the app-only credential for Business Central. Singleton, so MSAL's token cache is reused.</summary>
+/// <summary>
+/// The company's id: configured, or found once by name and then cached for the life of the app.
+/// </summary>
+public sealed class BusinessCentralCompany(IOptions<BusinessCentralOptions> options)
+{
+    // Two first requests at once may both look the name up; they get the same id, so no lock is needed.
+    private volatile string? _id;
+
+    internal async Task<string> GetIdAsync(BusinessCentralGateway gateway, CancellationToken ct)
+    {
+        if (_id is { } cached)
+        {
+            return cached;
+        }
+
+        var o = options.Value;
+        if (o.HasCompanyId)
+        {
+            _id = o.CompanyId!.Trim();
+            return _id;
+        }
+
+        var name = o.CompanyName?.Trim() ?? throw new InvalidOperationException("BusinessCentral:CompanyName or CompanyId is not configured.");
+        var found = await gateway.GetRawListAsync<BusinessCentralGateway.BcCompany>(
+            "companies?$filter=" + Uri.EscapeDataString($"name eq {BusinessCentralGateway.Literal(name)}"), ct).ConfigureAwait(false);
+        if (found.Count != 1)
+        {
+            throw new InvalidOperationException($"Business Central company '{name}' was found {found.Count} times in environment '{o.Environment}'; expected exactly once.");
+        }
+
+        _id = found[0].Id.ToString();
+        return _id;
+    }
+}
+
+/// <summary>
+/// Gets Business Central tokens without any stored secret. Singleton, so tokens are cached.
+/// <para>Federated (Azure): the app's managed identity gets a token for
+/// <c>api://AzureADTokenExchange</c>; the connector app registration trusts that token
+/// (federated credential) and exchanges it, in the Business Central tenant, for a token
+/// for the Business Central API.</para>
+/// <para>Cli (local development): your own <c>az login --tenant desiconerp.com</c>.</para>
+/// </summary>
 public sealed class BusinessCentralTokenSource
 {
     private static readonly string[] Scopes = ["https://api.businesscentral.dynamics.com/.default"];
+    private static readonly string[] ExchangeScopes = ["api://AzureADTokenExchange/.default"];
 
-    private readonly ClientSecretCredential _credential;
+    private readonly TokenCredential _credential;
 
-    public BusinessCentralTokenSource(IOptions<BusinessCentralOptions> options)
+    public BusinessCentralTokenSource(IOptions<BusinessCentralOptions> options, IConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(configuration);
         var o = options.Value;
-        _credential = new ClientSecretCredential(
-            o.TenantId ?? throw new InvalidOperationException("BusinessCentral:TenantId is not configured."),
+        var tenant = o.TenantId ?? throw new InvalidOperationException("BusinessCentral:TenantId is not configured.");
+
+        if (o.UsesCli)
+        {
+            _credential = new AzureCliCredential(new AzureCliCredentialOptions { TenantId = tenant });
+            return;
+        }
+
+        var miClientId = configuration["Azure:ManagedIdentityClientId"];
+        var managedIdentity = string.IsNullOrWhiteSpace(miClientId)
+            ? new ManagedIdentityCredential(ManagedIdentityId.SystemAssigned)
+            : new ManagedIdentityCredential(ManagedIdentityId.FromUserAssignedClientId(miClientId));
+
+        _credential = new ClientAssertionCredential(
+            tenant,
             o.ClientId ?? throw new InvalidOperationException("BusinessCentral:ClientId is not configured."),
-            o.ClientSecret ?? throw new InvalidOperationException("BusinessCentral:ClientSecret is not configured."));
+            async ct => (await managedIdentity.GetTokenAsync(new TokenRequestContext(ExchangeScopes), ct).ConfigureAwait(false)).Token);
     }
 
     public async Task<string> GetTokenAsync(CancellationToken ct)

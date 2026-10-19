@@ -93,24 +93,14 @@ variable "docintel_endpoint" {
   type        = string
 }
 
-variable "key_vault_uri" {
-  description = "Key Vault URI with trailing slash, used to build the bc-client-secret reference."
-  type        = string
-}
-
-variable "bc_client_secret_name" {
-  description = "Name of the Key Vault secret holding the Business Central client secret. Its value is set by an administrator, never by Terraform."
-  type        = string
-  default     = "bc-client-secret"
-}
-
 variable "business_central" {
-  description = "Business Central API connection details (non-secret). The secret itself comes from Key Vault."
+  description = "Business Central API connection. No secret: the apps' managed identities sign in through the connector app registration (federated credential)."
   type = object({
-    tenant_id   = string
-    environment = string
-    company_id  = string
-    client_id   = string
+    tenant_id    = string
+    environment  = string
+    company_id   = string
+    company_name = string
+    client_id    = string
   })
 }
 

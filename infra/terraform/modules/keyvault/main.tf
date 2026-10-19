@@ -1,12 +1,11 @@
 ###############################################################################
 # Desicon VIM Platform -- Key Vault module
 #
-# Holds the few secrets the platform cannot avoid. Today that is exactly one:
-# "bc-client-secret", the client secret Business Central's API requires for
-# service-to-service calls. Terraform creates the vault but NOT the secret
-# value -- a secret written by Terraform also lands in the Terraform state file
-# in plain text. An administrator sets it once by hand (see
-# docs/operations/infrastructure.md, "Set the Business Central secret").
+# Holds any secret the platform cannot avoid. Today there are none: Business
+# Central is reached through a federated credential (managed identity), not a
+# client secret. If a secret is ever needed, Terraform creates the vault but
+# NOT the secret value -- a secret written by Terraform also lands in the
+# Terraform state file in plain text -- so an administrator sets it by hand.
 #
 # Posture:
 #   - RBAC authorisation mode (no access policies). Who can read secrets is
@@ -61,8 +60,7 @@ resource "azurerm_key_vault" "this" {
   tags = var.tags
 }
 
-# The people (or group) allowed to set secret values by hand, such as the
-# bc-client-secret. Kept separate from the apps, which only get
+# The people (or group) allowed to set secret values by hand. Kept separate from the apps, which only get
 # "Key Vault Secrets User" (read) in the role-assignments module.
 resource "azurerm_role_assignment" "secrets_officers" {
   for_each = toset(var.secrets_officer_object_ids)

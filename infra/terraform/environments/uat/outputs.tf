@@ -44,7 +44,7 @@ output "sql_database_name" {
 }
 
 output "key_vault_name" {
-  description = "Key Vault name. Set the bc-client-secret secret here."
+  description = "Key Vault name (for any secret added later; Business Central needs none)."
   value       = module.keyvault.name
 }
 

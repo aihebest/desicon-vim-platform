@@ -24,10 +24,9 @@
     "DocumentIntelligence:Endpoint": "",
 
     "BusinessCentral:Enabled": "false",
-    "BusinessCentral:TenantId": "",
-    "BusinessCentral:ClientId": "",
-    "BusinessCentral:ClientSecret": "",
+    "BusinessCentral:TenantId": "desiconerp.com",
+    "BusinessCentral:AuthMode": "Cli",
     "BusinessCentral:Environment": "Sandbox",
-    "BusinessCentral:CompanyId": ""
+    "BusinessCentral:CompanyName": "Desicon Engineering Ltd"
   }
 }

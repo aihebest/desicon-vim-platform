@@ -46,7 +46,7 @@ variable "ip_rules" {
 }
 
 variable "secrets_officer_object_ids" {
-  description = "Entra object IDs (prefer a group) granted Key Vault Secrets Officer so they can set bc-client-secret by hand."
+  description = "Entra object IDs (prefer a group) granted Key Vault Secrets Officer so they can set secret values by hand."
   type        = list(string)
   default     = []
 }

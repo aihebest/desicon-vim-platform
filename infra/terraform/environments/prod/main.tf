@@ -260,13 +260,13 @@ module "app_hosting" {
   documents_blob_endpoint  = module.storage.primary_blob_endpoint
   documents_container_name = module.storage.documents_container_name
   docintel_endpoint        = module.docintel.endpoint
-  key_vault_uri            = module.keyvault.uri
 
   business_central = {
-    tenant_id   = var.business_central_tenant_id
-    environment = var.business_central_environment
-    company_id  = var.business_central_company_id
-    client_id   = var.business_central_client_id
+    tenant_id    = var.business_central_tenant_id
+    environment  = var.business_central_environment
+    company_id   = var.business_central_company_id
+    company_name = var.business_central_company_name
+    client_id    = var.business_central_client_id
   }
 
   app_insights_connection_string = module.monitoring.app_insights_connection_string

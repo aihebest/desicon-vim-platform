@@ -24,12 +24,12 @@
    Invoice mailbox ◄──Graph (scoped)──  Function app (timers) ──┤
                                                                 ├─► Blob storage (case documents, malware-scanned)
                                                                 ├─► Document Intelligence (reads invoices)
-                                                                ├─► Key Vault (Business Central secret)
+                                                                ├─► Business Central (desiconerp.com), via federated credential
                                                                 └─► Business Central API
             Both apps ──logs/metrics──► Application Insights ──► Log Analytics ◄── every resource's diagnostics
 ```
 
-**No passwords anywhere.** Each app has a *managed identity* — an identity Azure creates for the app and manages for it, with no password anyone can leak. Instead of connection strings with keys, each service is told “this identity may do X” (an Azure *role assignment*). The one secret we can’t avoid — Business Central’s API client secret — sits in Key Vault, and the apps read it with their identity.
+**No passwords anywhere.** Each app has a *managed identity* — an identity Azure creates for the app and manages for it, with no password anyone can leak. Instead of connection strings with keys, each service is told “this identity may do X” (an Azure *role assignment*). Even Business Central, in its own tenant, is reached without a secret: a federated credential lets the apps’ identities act as the VIM connector there.
 
 ---
 
@@ -40,7 +40,7 @@
 | Resource group `rg-vim-dev-weu` | Container for everything in one environment | env root |
 | Log Analytics `law-vim-dev-weu` | Central log store. Every resource sends diagnostics here, so one query can follow an incident across services | `monitoring` |
 | Application Insights `appi-vim-dev-weu` | Application telemetry (requests, errors, dependencies, traces) from both apps; stored in the workspace above | `monitoring` |
-| Key Vault `kv-vim-dev-weu-xxxx` | Holds `bc-client-secret`. RBAC mode, purge protection, 90-day soft delete | `keyvault` |
+| Key Vault `kv-vim-dev-weu-xxxx` | For any secret added later (none today: Business Central uses a federated credential). RBAC mode, purge protection, 90-day soft delete | `keyvault` |
 | Storage `stvimdevweuxxxx` | `case-documents` container: invoices, delivery notes, GRVs. No shared keys, no public blobs, versioning, 30-day soft delete, Defender malware scanning on upload, optional WORM | `storage` |
 | Azure SQL server + `VimDb` | Transactional data and the insert-only audit table. Entra-only auth (no SQL logins), TLS 1.2, auditing to Log Analytics | `sql` |
 | Document Intelligence `di-vim-dev-weu-xxxx` | Extracts invoice fields (vendor, number, totals, lines). API keys disabled — identity only | `docintel` |
@@ -59,7 +59,7 @@
 | Web + Function | Cognitive Services User | Document Intelligence |
 | Web + Function | Key Vault Secrets User | Key Vault |
 | Function | Storage Blob Data Owner, Queue Data Contributor, Table Data Contributor | host storage |
-| Your admin group | Key Vault Secrets Officer | Key Vault (to set `bc-client-secret`) |
+| Your admin group | Key Vault Secrets Officer | Key Vault (to set any secret added later) |
 
 **Naming:** `<type>-vim-<env>-<region>`, e.g. `rg-vim-dev-weu`. Names that must be unique across all of Azure get a random 4-character suffix (stored in state, so it never changes). **Tags** on everything: `application=vim`, `owner=ICT`, `business_owner=Finance`, `environment`, `managed_by=terraform`.
 
@@ -229,19 +229,13 @@ $func = terraform -chdir=..\terraform\environments\dev output -raw function_app_
 
 Permissions can take up to ~2 hours to reach Graph.
 
-### 4.8 Set the Business Central secret
+### 4.8 Connect Business Central (no secret)
 
-Terraform deliberately does **not** create this secret: anything Terraform writes is stored in plain text in the state file. You set it once, by hand:
-
-```powershell
-$kv = terraform -chdir=..\terraform\environments\dev output -raw key_vault_name
-$secure = Read-Host "Business Central client secret" -AsSecureString
-$plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
-az keyvault secret set --vault-name $kv --name bc-client-secret --value $plain --output none
-Remove-Variable plain, secure
-```
-
-The apps reference it as `@Microsoft.KeyVault(SecretUri=https://<vault>.vault.azure.net/secrets/bc-client-secret)` — no version, so a rotated secret is picked up within ~24 h or on app restart. In prod (no public vault endpoint) run this from a machine inside the VNet.
+Business Central is in its own tenant (`desiconerp.com`) and is reached through a
+federated credential, so there is no secret to set. Follow
+`docs/operations/business-central.md`, "Setting up access": run
+`bootstrap-bc-connector.ps1`, consent in `desiconerp.com`, enable the connector in
+BC with D365 READ, set `BC_CLIENT_ID`.
 
 ### 4.9 Create the database users (first run)
 
@@ -353,7 +347,7 @@ No prices are quoted here — they vary by region, currency and agreement and ch
 The app developers must keep these in step with the infrastructure:
 
 - **App settings** (set by Terraform; `__` maps to `:` in .NET configuration):
-  `ConnectionStrings:VimDb`, `Storage:BlobServiceUri`, `Storage:DocumentsContainer` (`case-documents`), `DocumentIntelligence:Endpoint`, `BusinessCentral:{TenantId,Environment,CompanyId,ClientId,ClientSecret}`, `APPLICATIONINSIGHTS_CONNECTION_STRING`; web only `AzureAd:{Instance,TenantId,ClientId}`; functions only `Mailbox:UserId`, `Mailbox:ProcessedFolderName` (`Processed`), `AzureWebJobsStorage__accountName`, `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`.
+  `ConnectionStrings:VimDb`, `Storage:BlobServiceUri`, `Storage:DocumentsContainer` (`case-documents`), `DocumentIntelligence:Endpoint`, `BusinessCentral:{TenantId,Environment,CompanyId,CompanyName,ClientId,AuthMode}`, `APPLICATIONINSIGHTS_CONNECTION_STRING`; web only `AzureAd:{Instance,TenantId,ClientId}`; functions only `Mailbox:UserId`, `Mailbox:ProcessedFolderName` (`Processed`), `AzureWebJobsStorage__accountName`, `FUNCTIONS_WORKER_RUNTIME=dotnet-isolated`.
 - `ASPNETCORE_ENVIRONMENT` / `AZURE_FUNCTIONS_ENVIRONMENT` are `Dev`, `Uat`, `Production` (so `appsettings.Dev.json` etc.; `IsDevelopment()` is false in Azure).
 - **Managed identity everywhere:** use `DefaultAzureCredential` (or `ManagedIdentityCredential`) for Blob, Document Intelligence and Graph. Shared keys and Document Intelligence API keys are disabled.
 - **Document Intelligence** has outbound access restricted: send document **bytes** (stream/base64), not a blob URL.

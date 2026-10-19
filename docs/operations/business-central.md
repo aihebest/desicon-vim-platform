@@ -19,37 +19,63 @@ Code: `src/Desicon.Vim.Infrastructure/Erp/BusinessCentralGateway.cs`.
 Problems are raised as **flags** on the case for people to review; a BC check
 never silently rejects an invoice.
 
+## How the platform signs in (no secret)
+
+Business Central lives in its **own Entra tenant, `desiconerp.com`**, separate
+from the tenant the VIM apps run in. The platform reaches it the same way the
+Cost Control platform (DCCP) does, with **no client secret anywhere**:
+
+1. The web app or function app asks Azure for a token as its **managed
+   identity** (audience `api://AzureADTokenExchange`).
+2. The **VIM Business Central connector** app registration (multi-tenant,
+   created by `infra/scripts/bootstrap-bc-connector.ps1`) trusts that
+   identity through a **federated credential**, and exchanges the token in
+   the `desiconerp.com` tenant for a Business Central API token.
+3. Business Central lets the connector in because it is listed on its
+   **Microsoft Entra Applications** page with the **D365 READ** permission set.
+
+Entra only offers `API.ReadWrite.All` for Business Central; the D365 READ
+permission set inside BC is what keeps the connector read-only. Every request
+also carries `Data-Access-Intent: ReadOnly`.
+
+VIM has its **own** connector rather than sharing DCCP's, so each platform's
+permissions and audit trail stay separate.
+
 ## Configuration
 
 | Setting | Example | Notes |
 |---|---|---|
 | `BusinessCentral:Enabled` | `true` | Master switch. Default `false`: no calls are made and checks are skipped. |
-| `BusinessCentral:TenantId` | GUID | Desicon's Entra tenant id. |
-| `BusinessCentral:ClientId` | GUID | App registration used only for BC. |
-| `BusinessCentral:ClientSecret` | Key Vault reference | Never in source control or plain app settings. |
-| `BusinessCentral:Environment` | `Production` / `Sandbox` | BC environment name. |
-| `BusinessCentral:CompanyId` | GUID | From `GET .../api/v2.0/companies`. |
+| `BusinessCentral:TenantId` | `desiconerp.com` | The tenant BC lives in. |
+| `BusinessCentral:ClientId` | GUID | The VIM connector's client ID (printed by the bootstrap script). |
+| `BusinessCentral:AuthMode` | `Federated` | `Federated` in Azure. `Cli` on a developer PC: uses your own `az login --tenant desiconerp.com --allow-no-subscriptions`. |
+| `BusinessCentral:Environment` | `Sandbox` / `Production` | Sandbox for dev and uat; Production for prod only. |
+| `BusinessCentral:CompanyName` | `Desicon Engineering Ltd` | Looked up once to find the company ID. |
+| `BusinessCentral:CompanyId` | GUID | Optional; skips the lookup. |
 | `BusinessCentral:LocalCurrencyCode` | `NGN` (default) | BC leaves the currency empty for local currency; this value is used instead. |
 
-The gateway is active only when `Enabled` is `true` **and** all the ids and
-the secret are present. Otherwise a "disabled" gateway is used and the
-workflow runs without BC checks.
+The gateway is active only when `Enabled` is `true` and the tenant, client ID
+(unless `Cli`), environment and company are set. Otherwise a "disabled"
+gateway is used and the workflow runs without BC checks.
 
-### Setting up access in BC (Global Administrator task)
+### Setting up access (once per environment)
 
-1. In Entra ID, create an app registration (e.g. `vim-bc-reader-prod`), add
-   the API permission **Dynamics 365 Business Central > Application
-   permissions > API.ReadWrite.All**, and grant admin consent. (BC has no
-   read-only application permission; access is restricted inside BC in the
-   next step.)
-2. In Business Central, open **Microsoft Entra Applications**, add the
-   app's Client ID, set State = Enabled, and assign permission sets that give
-   **read-only** access to vendors, purchase orders/lines and purchase
-   invoices for the Desicon company only (e.g. a custom permission set with
-   Read on those tables; do not assign SUPER or D365 BUS FULL ACCESS).
-3. Put the client secret in Key Vault; the function and web apps read it via
-   a Key Vault reference (see `infra/terraform/modules/app-hosting`).
-4. Test in a **Sandbox** environment first.
+1. Deploy the environment first (the apps' managed identities must exist).
+2. In the **main** tenant: `.\infra\scripts\bootstrap-bc-connector.ps1 -Environment dev`.
+   It creates the connector, trusts the web and function app identities and
+   prints the next steps.
+3. As **Global Administrator of `desiconerp.com`**: open the printed
+   admin-consent link and accept.
+4. In Business Central (**Sandbox** for dev/uat, **Production** for prod):
+   **Microsoft Entra Applications > New**: the connector's Client ID,
+   State = Enabled, permission set **D365 READ**, company Desicon Engineering Ltd.
+   Never SUPER or a write permission set.
+5. Set GitHub variables on `<env>-plan` and `<env>`: `BC_TENANT_ID = desiconerp.com`,
+   `BC_ENVIRONMENT = Sandbox` (or `Production`), `BC_CLIENT_ID = <client id>`.
+   Then set `vim_settings.business_central_enabled = true` and deploy.
+
+If BC answers 403 for a page added by a Desicon extension, the extension's own
+read permission set may also be needed (the same note as in DCCP's setup guide).
 
 ## Assumptions to validate with Finance and the BC partner
 
