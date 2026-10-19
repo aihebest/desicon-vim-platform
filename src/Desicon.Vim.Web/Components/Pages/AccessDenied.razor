@@ -1,0 +1,40 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+@using System.Security.Claims
+
+@* Reachable without a VIM role on purpose: the deny-by-default policy must not
+   cover the page that explains a denial, or the browser loops until the URL is
+   too long (HTTP 414). Shows the signed-in person's own roles so ICT can see at
+   a glance why access was refused. *@
+
+<PageTitle>Access needed - VIM</PageTitle>
+
+<div class="panel">
+    <h1>Access needed</h1>
+    <AuthorizeView>
+        <Authorized>
+            <p>You are signed in as <strong>@(context.User.FindFirst("name")?.Value)</strong>
+               (@(context.User.FindFirst("preferred_username")?.Value)), but you don't hold a role that allows this page.</p>
+            @{
+                var roles = context.User.Claims
+                    .Where(c => c.Type == ClaimTypes.Role || c.Type == "roles")
+                    .Select(c => c.Value).Distinct().OrderBy(v => v, StringComparer.Ordinal).ToList();
+            }
+            @if (roles.Count == 0)
+            {
+                <p><strong>Your sign-in contains no VIM roles.</strong> Ask ICT to add you to the right group
+                   (Document Controller, Reviewer, Accounts Payable, Finance Manager, Platform Admin or Auditor).
+                   If you were added in the last few minutes, sign out and sign in again so Microsoft issues a new sign-in with the role.</p>
+            }
+            else
+            {
+                <p>Roles in your sign-in: <strong>@string.Join(", ", roles)</strong>.
+                   This page needs a different role. Ask ICT if you think that's wrong.</p>
+            }
+            <p><a class="button" href="MicrosoftIdentity/Account/SignOut">Sign out</a> &nbsp; <a href="">Go to the dashboard</a></p>
+        </Authorized>
+        <NotAuthorized>
+            <p>You are not signed in. <a href="MicrosoftIdentity/Account/SignIn">Sign in</a></p>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
