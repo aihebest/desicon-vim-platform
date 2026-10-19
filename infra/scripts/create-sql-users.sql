@@ -101,6 +101,14 @@ IF IS_ROLEMEMBER(N'vim_app', N'$(WebAppName)') = 0
 IF IS_ROLEMEMBER(N'vim_app', N'$(FunctionAppName)') = 0
     ALTER ROLE [vim_app] ADD MEMBER [$(FunctionAppName)];
 
+-- Case references come from a SEQUENCE. NEXT VALUE FOR needs UPDATE on the
+-- sequence object, which db_datawriter (tables only) does not include.
+IF OBJECT_ID(N'[vim].[CaseReferenceSeq]', N'SO') IS NOT NULL
+BEGIN
+    GRANT UPDATE ON OBJECT::[vim].[CaseReferenceSeq] TO [vim_app];
+    PRINT 'Granted UPDATE on sequence [vim].[CaseReferenceSeq] to vim_app (case reference numbers).';
+END;
+
 -- -- 3. Insert-only audit table ----------------------------------------------
 IF OBJECT_ID(N'[vim].[RouteChanges]', N'U') IS NOT NULL
 BEGIN

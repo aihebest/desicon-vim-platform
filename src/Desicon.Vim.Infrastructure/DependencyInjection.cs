@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.Graph;
 
@@ -150,7 +151,20 @@ public static class DependencyInjection
         await using (scope.ConfigureAwait(false))
         {
             var seeder = scope.ServiceProvider.GetRequiredService<RouteSeeder>();
-            await seeder.SeedAsync(ct).ConfigureAwait(false);
+            try
+            {
+                await seeder.SeedAsync(ct).ConfigureAwait(false);
+            }
+#pragma warning disable CA1031 // Seeding is best-effort: a database problem must not stop the app starting.
+            catch (Exception ex) when (ex is not OperationCanceledException)
+#pragma warning restore CA1031
+            {
+                // Keep the app up so /health can report the database problem and
+                // staff see a clear error, instead of the site crash-looping.
+                scope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("Desicon.Vim.Startup")
+                    .LogError(ex, "Seeding the invoice routes failed at startup; the app will start without them. Check the database connection and permissions.");
+            }
         }
     }
 
