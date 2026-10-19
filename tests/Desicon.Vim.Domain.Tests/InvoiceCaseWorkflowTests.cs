@@ -336,4 +336,19 @@ public class InvoiceCaseWorkflowTests
         Assert.Contains("ro-9", change.NewValueJson);
         Assert.Null(route.Update("GMC invoices", "ro-9", "Uche", ["ro-2"], true, At(FinanceManager)));
     }
+
+    [Fact]
+    public void Creating_a_missing_route_needs_the_finance_manager_and_is_recorded()
+    {
+        Assert.Equal(RuleCodes.RoleNotPermitted, CodeOf(() => CategoryRoute.Create("pmc", "PMC project invoices", "ro-1", "Chidi", [], true, At(DocumentController))));
+
+        var (route, change) = CategoryRoute.Create("pmc", "PMC project invoices", " ro-1 ", "Chidi", [" ro-2 ", ""], true, At(FinanceManager));
+        Assert.Equal("PMC", route.Code);
+        Assert.Equal("ro-1", route.ReviewerId);
+        Assert.Equal(["ro-2"], route.DelegateIdList);
+        Assert.Equal("PMC", change.RouteCode);
+        Assert.Equal(FinanceManager.Id, change.ChangedById);
+        Assert.Equal("{}", change.OldValueJson);
+        Assert.Contains("ro-1", change.NewValueJson);
+    }
 }

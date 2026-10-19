@@ -42,6 +42,30 @@ public sealed class CategoryRoute
     public IReadOnlyList<string> DelegateIdList =>
         DelegateIds.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
+    /// <summary>
+    /// Creates a route that does not exist yet (first-time set-up of an SOP
+    /// category) and returns the audit record to save with it. Finance Manager only.
+    /// </summary>
+    public static (CategoryRoute Route, RouteChangeRecord Change) Create(
+        string code, string displayName, string reviewerId, string reviewerName, IEnumerable<string> delegateIds, bool active, Cases.ActionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(ctx);
+        if (!ctx.Actor.HasRole(Cases.VimRole.FinanceManager))
+        {
+            throw new Cases.DomainRuleException(Cases.RuleCodes.RoleNotPermitted, "Only the Finance Manager can change invoice routing.");
+        }
+
+        ArgumentNullException.ThrowIfNull(delegateIds);
+        var route = new CategoryRoute(
+            code,
+            displayName.Trim(),
+            reviewerId.Trim(),
+            reviewerName.Trim(),
+            delegateIds.Select(d => d.Trim()).Where(d => d.Length > 0),
+            active);
+        return (route, RouteChangeRecord.Create(route.Code, "{}", route.Snapshot(), ctx));
+    }
+
     /// <summary>Changes the route and returns the audit record to save with it (null when nothing changed).</summary>
     public RouteChangeRecord? Update(string displayName, string reviewerId, string reviewerName, IEnumerable<string> delegateIds, bool active, Cases.ActionContext ctx)
     {
