@@ -16,14 +16,13 @@ sql_admin_group_object_id = "00000000-0000-0000-0000-000000000000"
 # Created by infra/scripts/bootstrap-entra-app.ps1 -Environment uat
 entra_workbench_client_id = "00000000-0000-0000-0000-000000000000"
 
-# People allowed to set bc-client-secret in Key Vault (a group object ID is best).
+# People allowed to set Key Vault secret values, if any are ever needed (a group object ID is best).
 keyvault_secrets_officer_object_ids = ["00000000-0000-0000-0000-000000000000"]
 
-# Business Central API connection (the secret is NOT here -- it goes in Key Vault).
-business_central_tenant_id   = "00000000-0000-0000-0000-000000000000"
+# Business Central API connection. No secret: the apps sign in through the connector (federated credential).
+business_central_tenant_id   = "desiconerp.com"
 business_central_environment = "Sandbox"
-business_central_company_id  = "00000000-0000-0000-0000-000000000000"
-business_central_client_id   = "00000000-0000-0000-0000-000000000000"
+business_central_client_id   = "" # from bootstrap-bc-connector.ps1; empty = BC checks off
 
 # Shared mailbox the function app reads invoices from.
 mailbox_user_id = "invoices-test@example.com"

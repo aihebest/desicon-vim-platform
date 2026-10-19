@@ -105,6 +105,7 @@ public static class DependencyInjection
         if (bc.IsEnabled)
         {
             services.AddSingleton<BusinessCentralTokenSource>();
+            services.AddSingleton<BusinessCentralCompany>();
             services.AddTransient<BusinessCentralAuthHandler>();
             services.AddHttpClient<IErpGateway, BusinessCentralGateway>(client =>
                 {

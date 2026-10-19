@@ -80,15 +80,16 @@ variable "entra_workbench_client_id" {
 }
 
 variable "keyvault_secrets_officer_object_ids" {
-  description = "Entra object IDs (prefer one group) allowed to set Key Vault secret values such as bc-client-secret."
+  description = "Entra object IDs (prefer one group) allowed to set Key Vault secret values (none are needed today; Business Central signs in without a secret)."
   type        = list(string)
   default     = []
 }
 
 # -- Business Central -------------------------------------------------------------------
 variable "business_central_tenant_id" {
-  description = "Entra tenant ID that hosts Business Central (normally Desicon's own tenant)."
+  description = "The Entra tenant Business Central lives in: desiconerp.com (separate from the tenant the platform runs in)."
   type        = string
+  default     = "desiconerp.com"
 }
 
 variable "business_central_environment" {
@@ -98,13 +99,21 @@ variable "business_central_environment" {
 }
 
 variable "business_central_company_id" {
-  description = "Business Central company ID (GUID) the platform reads vendors/POs from."
+  description = "Business Central company ID (GUID). Optional: leave empty to look the company up by business_central_company_name."
   type        = string
+  default     = ""
+}
+
+variable "business_central_company_name" {
+  description = "Business Central company name, looked up once to find its ID."
+  type        = string
+  default     = "Desicon Engineering Ltd"
 }
 
 variable "business_central_client_id" {
-  description = "Client ID of the Entra app registration Business Central trusts for API access. Its secret goes in Key Vault as bc-client-secret."
+  description = "Client ID of the VIM Business Central connector app registration (infra/scripts/bootstrap-bc-connector.ps1). Empty = Business Central checks stay off."
   type        = string
+  default     = ""
 }
 
 # -- Mailbox ----------------------------------------------------------------------------

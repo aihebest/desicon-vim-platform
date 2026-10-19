@@ -14,7 +14,8 @@
 #   TF_STATE_RESOURCE_GROUP, TF_STATE_STORAGE_ACCOUNT, [TF_STATE_SUBSCRIPTION_ID]
 #   SQL_ADMIN_GROUP_NAME, SQL_ADMIN_GROUP_OBJECT_ID
 #   ENTRA_WORKBENCH_CLIENT_ID
-#   BC_TENANT_ID, BC_ENVIRONMENT, BC_COMPANY_ID, BC_CLIENT_ID
+#   BC_TENANT_ID (desiconerp.com), BC_ENVIRONMENT
+#   [BC_CLIENT_ID]  connector client id; empty = BC checks off  [BC_COMPANY_ID]  optional
 #   MAILBOX_USER_ID
 #   [KEYVAULT_SECRETS_OFFICER_OBJECT_IDS]  HCL list, e.g. ["<group-object-id>"]
 #   AZURE_MIGRATION_CLIENT_ID   ("<env>" only) the migration identity
@@ -105,7 +106,6 @@ jobs:
           for v in ARM_CLIENT_ID ARM_TENANT_ID ARM_SUBSCRIPTION_ID TF_VAR_sql_admin_group_name \
                    TF_VAR_sql_admin_group_object_id TF_VAR_entra_workbench_client_id \
                    TF_VAR_business_central_tenant_id TF_VAR_business_central_environment \
-                   TF_VAR_business_central_company_id TF_VAR_business_central_client_id \
                    TF_VAR_mailbox_user_id; do
             if [ -z "${!v}" ]; then echo "::error::GitHub environment variable for $v is not set"; missing=1; fi
           done

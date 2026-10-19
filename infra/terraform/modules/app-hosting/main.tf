@@ -37,12 +37,6 @@ terraform {
 }
 
 locals {
-  # Business Central client secret: a Key Vault reference, resolved by App
-  # Service at runtime using the app's system-assigned identity. No version
-  # in the URI, so a rotated secret is picked up automatically (App Service
-  # re-reads references roughly every 24 hours, or on restart).
-  bc_client_secret_reference = "@Microsoft.KeyVault(SecretUri=${var.key_vault_uri}secrets/${var.bc_client_secret_name})"
-
   # Settings both apps read. Keys use "__" because Linux App Service does not
   # allow ":" in setting names; .NET configuration maps "__" back to ":".
   shared_app_settings = {
@@ -55,7 +49,8 @@ locals {
     "BusinessCentral__Environment"   = var.business_central.environment
     "BusinessCentral__CompanyId"     = var.business_central.company_id
     "BusinessCentral__ClientId"      = var.business_central.client_id
-    "BusinessCentral__ClientSecret"  = local.bc_client_secret_reference
+    "BusinessCentral__CompanyName"   = var.business_central.company_name
+    "BusinessCentral__AuthMode"      = "Federated"
     "BusinessCentral__Enabled"       = tostring(var.vim_settings.business_central_enabled)
     "Vim__WorkbenchUrl"              = coalesce(var.vim_settings.workbench_url, "https://${var.web_app_name}.azurewebsites.net")
     "Vim__FinanceManagerEmail"       = var.vim_settings.finance_manager_email

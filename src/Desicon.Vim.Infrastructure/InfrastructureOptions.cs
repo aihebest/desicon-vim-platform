@@ -46,7 +46,14 @@ public sealed class DocumentIntelligenceOptions
     public string ModelId { get; set; } = "prebuilt-invoice";
 }
 
-/// <summary>Business Central API connection, section "BusinessCentral". Read-only use only.</summary>
+/// <summary>
+/// Business Central API connection, section "BusinessCentral". Read-only use only.
+/// Business Central lives in its own Entra tenant (desiconerp.com), separate from the
+/// tenant the platform runs in. The platform signs in with NO stored secret: the app's
+/// managed identity is trusted by a multi-tenant "connector" app registration (a
+/// federated credential), and that connector is consented in the BC tenant and enabled
+/// in BC with a read-only permission set. Same pattern as the Cost Control platform (DCCP).
+/// </summary>
 public sealed class BusinessCentralOptions
 {
     public const string SectionName = "BusinessCentral";
@@ -54,17 +61,26 @@ public sealed class BusinessCentralOptions
     /// <summary>Master switch. Even with all settings present, nothing is called unless this is true.</summary>
     public bool Enabled { get; set; }
 
+    /// <summary>The Business Central tenant: its domain (desiconerp.com) or id.</summary>
     public string? TenantId { get; set; }
 
+    /// <summary>Client id of the connector app registration (infra/scripts/bootstrap-bc-connector.ps1).</summary>
     public string? ClientId { get; set; }
 
-    public string? ClientSecret { get; set; }
+    /// <summary>
+    /// "Federated" (default; in Azure: managed identity, then the connector) or
+    /// "Cli" (local development: your own <c>az login --tenant desiconerp.com</c>).
+    /// </summary>
+    public string AuthMode { get; set; } = "Federated";
 
     /// <summary>Business Central environment name, e.g. "Production" or "Sandbox".</summary>
     public string Environment { get; set; } = "Production";
 
-    /// <summary>Company id (GUID) as returned by GET .../api/v2.0/companies.</summary>
+    /// <summary>Company id (GUID) as returned by GET .../api/v2.0/companies. Optional when <see cref="CompanyName"/> is set.</summary>
     public string? CompanyId { get; set; }
+
+    /// <summary>Company name, e.g. "Desicon Engineering Ltd". Looked up once to find its id.</summary>
+    public string? CompanyName { get; set; }
 
     /// <summary>
     /// Business Central leaves currencyCode empty for the local currency (LCY).
@@ -72,16 +88,19 @@ public sealed class BusinessCentralOptions
     /// </summary>
     public string LocalCurrencyCode { get; set; } = "NGN";
 
+    public bool UsesCli => string.Equals(AuthMode, "Cli", StringComparison.OrdinalIgnoreCase);
+
+    public bool HasCompanyId => Guid.TryParse(CompanyId, out var id) && id != Guid.Empty;
+
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(TenantId)
-        && !string.IsNullOrWhiteSpace(ClientId)
-        && !string.IsNullOrWhiteSpace(ClientSecret)
+        && (UsesCli || (Guid.TryParse(ClientId, out var client) && client != Guid.Empty))
         && !string.IsNullOrWhiteSpace(Environment)
-        && !string.IsNullOrWhiteSpace(CompanyId);
+        && (HasCompanyId || !string.IsNullOrWhiteSpace(CompanyName));
 
     public bool IsEnabled => Enabled && IsConfigured;
 
-    /// <summary>https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/v2.0/companies({companyId})/</summary>
+    /// <summary>https://api.businesscentral.dynamics.com/v2.0/{tenant}/{environment}/api/v2.0/</summary>
     public Uri BuildBaseAddress() =>
-        new($"https://api.businesscentral.dynamics.com/v2.0/{Uri.EscapeDataString(TenantId ?? string.Empty)}/{Uri.EscapeDataString(Environment)}/api/v2.0/companies({Uri.EscapeDataString(CompanyId ?? string.Empty)})/");
+        new($"https://api.businesscentral.dynamics.com/v2.0/{Uri.EscapeDataString(TenantId ?? string.Empty)}/{Uri.EscapeDataString(Environment)}/api/v2.0/");
 }
