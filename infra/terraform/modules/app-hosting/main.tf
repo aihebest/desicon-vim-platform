@@ -64,11 +64,14 @@ locals {
     "Vim__VerificationBasis"         = var.vim_settings.verification_basis
   }
 
+  # WEBSITES_CONTAINER_START_TIME_LIMIT: a cold start on the small dev plan can
+  # take a few minutes; the default 230 s limit made App Service give up.
   web_app_settings = merge(local.shared_app_settings, {
     "APPLICATIONINSIGHTS_CONNECTION_STRING" = var.app_insights_connection_string
     "AzureAd__Instance"                     = "https://login.microsoftonline.com/"
     "AzureAd__TenantId"                     = var.entra_tenant_id
     "AzureAd__ClientId"                     = var.entra_workbench_client_id
+    "WEBSITES_CONTAINER_START_TIME_LIMIT"   = "600"
   })
 
   # APPLICATIONINSIGHTS_CONNECTION_STRING is set through site_config below for
