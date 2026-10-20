@@ -149,6 +149,27 @@ if (-not $spId) {
 az ad sp update --id $spId --set appRoleAssignmentRequired=true | Out-Null
 Write-Host "Assignment required: on."
 
+# -- 2b. Sign-in permissions, approved for the whole organisation ----------------
+# Without these listed and admin-consented, every non-admin user sees
+# "Need admin approval" at sign-in. Delegated Microsoft Graph scopes only:
+# openid, profile, email, offline_access, User.Read (no mail or file access).
+$graphApi = '00000003-0000-0000-c000-000000000000'
+$signInScopes = @(
+    '37f7f235-527c-4136-accd-4a02d197296e', # openid
+    '14dad69e-099b-42c9-810b-d002981feec1', # profile
+    '64a6cdd6-aab1-4aaf-94b8-3cc8405e90d0', # email
+    '7427e0e9-2fba-42fe-b0c0-848c9e6a8182', # offline_access
+    'e1fe6dd8-ba31-4d61-89e7-88639da4683d'  # User.Read
+)
+$rraFile = Join-Path ([IO.Path]::GetTempPath()) "vim-app-rra-$Environment.json"
+[IO.File]::WriteAllText($rraFile, (ConvertTo-Json -Depth 5 -InputObject @(
+    [ordered]@{ resourceAppId = $graphApi; resourceAccess = @($signInScopes | ForEach-Object { [ordered]@{ id = $_; type = 'Scope' } }) })))
+az ad app update --id $appId --required-resource-accesses "@$rraFile" | Out-Null
+Remove-Item $rraFile -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 15 # let Entra replicate the change before consenting
+az ad app permission admin-consent --id $appId
+Write-Host "Sign-in permissions approved for the organisation."
+
 # -- 3. Optional: assign groups to roles -----------------------------------------
 foreach ($roleValue in $RoleGroups.Keys) {
     $role = $roles | Where-Object { $_.value -eq $roleValue }
