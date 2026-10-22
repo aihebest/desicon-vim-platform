@@ -33,9 +33,10 @@ public static class NotificationTemplates
 
     public static OutboundNotification Acknowledgement(InvoiceCase c, string to) => new(
         c.Id, nameof(Acknowledgement), NotificationChannel.Email, to,
-        $"Received: {c.Reference} — your invoice submission",
-        $"<p>Dear Vendor,</p><p>We have received your invoice submission and registered it under reference <strong>{E(c.Reference)}</strong>.</p>" +
-        "<p>Our team will check that the invoice and supporting documents are complete. If anything is missing, we will write to you with the reason. Please quote this reference in all correspondence and resubmissions.</p>" +
+        $"Received: {c.Reference} — invoice {c.InvoiceNumber}",
+        $"<p>Dear {E(c.VendorName ?? "Vendor")},</p><p>We have received your invoice submission{Round(c)} and recorded it under reference <strong>{E(c.Reference)}</strong>{InvoiceLine(c)}.</p>" +
+        "<p>It will now be checked automatically against your purchase / service order and the delivery confirmed by our department, and then by Accounts. " +
+        "We will write to you when it is <strong>accepted</strong> (your credit period counts from the acceptance date) or, if anything needs correcting, with the reasons.</p>" +
         "<p><strong>Important:</strong> Desicon pays only into the bank account held on your vendor record. We will never ask you to change bank details by email.</p>" + Footer);
 
     public static OutboundNotification NonPdfRejected(string to, string? subject) => new(
@@ -46,35 +47,53 @@ public static class NotificationTemplates
 
     public static OutboundNotification ReturnedToVendor(InvoiceCase c, string to, string reason) => new(
         c.Id, nameof(ReturnedToVendor), NotificationChannel.Email, to,
-        $"Action needed: {c.Reference} returned for correction",
-        $"<p>Dear Vendor,</p><p>Your submission <strong>{E(c.Reference)}</strong> (invoice {E(c.InvoiceNumber)}) cannot be processed yet.</p>" +
+        $"Not accepted: {c.Reference} — invoice {c.InvoiceNumber} needs correction",
+        $"<p>Dear {E(c.VendorName ?? "Vendor")},</p><p>Your submission <strong>{E(c.Reference)}</strong>{InvoiceLine(c)} has <strong>not been accepted</strong>, so no credit period is running on it.</p>" +
         $"<p><strong>Reason:</strong> {E(reason)}</p>" +
-        $"<p>Please reply to this email with the corrected documents as one PDF, keeping <strong>{E(c.Reference)}</strong> in the subject line so we can link it to your original submission.</p>" + Footer);
+        $"<p>Please correct the points above and resubmit against reference <strong>{E(c.Reference)}</strong>. If you need help, contact Accounts Payable quoting this reference.</p>" + Footer);
 
-    public static OutboundNotification AssignedToReviewer(InvoiceCase c, string to, string workbenchUrl) => new(
-        c.Id, nameof(AssignedToReviewer), NotificationChannel.Email, to,
-        $"For review: {c.Reference} — {c.VendorName} — {c.InvoiceNumber}",
-        $"<p>A vendor invoice has been assigned to you for verification.</p>" +
-        $"<p><strong>{E(c.Reference)}</strong><br/>Vendor: {E(c.VendorName)}<br/>Invoice: {E(c.InvoiceNumber)}<br/>PO/SO: {E(c.OrderNumber)}<br/>Amount: {E(c.Currency)} {c.Amount?.ToString("N2", CultureInfo.InvariantCulture)}<br/>Due: {Due(c)}</p>" +
-        $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+    public static OutboundNotification Accepted(InvoiceCase c, string to) => new(
+        c.Id, nameof(Accepted), NotificationChannel.Email, to,
+        $"Accepted: {c.Reference} — invoice {c.InvoiceNumber}",
+        $"<p>Dear {E(c.VendorName ?? "Vendor")},</p><p>Your invoice submission <strong>{E(c.Reference)}</strong>{InvoiceLine(c)} has been checked and <strong>accepted</strong> by Desicon Accounts on <strong>{Wat(c.AcceptedAtUtc)}</strong>.</p>" +
+        "<p>This is the official submission date: your agreed credit period counts from it. Payment will be made to the bank account held on your vendor record.</p>" + Footer);
+
+    public static OutboundNotification ReadyForAccounts(InvoiceCase c, string to, string workbenchUrl) => new(
+        c.Id, nameof(ReadyForAccounts), NotificationChannel.Email, to,
+        $"For confirmation: {c.Reference} — {c.VendorName} — {c.InvoiceNumber}",
+        $"<p>Invoice <strong>{E(c.Reference)}</strong> has passed the automatic checks (PO, posted receipt, full value, duplicates) and is waiting for your confirmatory check.</p>" +
+        Summary(c) + $"<p>Due: {Due(c)}</p><p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+
+    public static OutboundNotification ExceptionForFinanceManager(InvoiceCase c, string to, string workbenchUrl) => new(
+        c.Id, nameof(ExceptionForFinanceManager), NotificationChannel.Email, to,
+        $"Decision needed: {c.Reference} — {c.VendorName} — {c.InvoiceNumber}",
+        $"<p>Invoice <strong>{E(c.Reference)}</strong> needs your decision before it can go to Accounts:</p><ul>" +
+        string.Concat(c.Flags.Where(f => f.IsOpen && f.Blocking).Select(f => $"<li>{E(f.Description)}</li>")) + "</ul>" +
+        Summary(c) + $"<p>Due: {Due(c)}</p><p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
 
     public static OutboundNotification Reminder(InvoiceCase c, string to, string workbenchUrl) => new(
         c.Id, nameof(Reminder), NotificationChannel.Email, to,
         $"Reminder: {c.Reference} due {Due(c)}",
-        $"<p>Invoice <strong>{E(c.Reference)}</strong> from {E(c.VendorName)} is awaiting your verification and is due {Due(c)}.</p>" +
+        $"<p>Invoice <strong>{E(c.Reference)}</strong> from {E(c.VendorName)} is waiting for {E(c.AssignedReviewerName)} and is due {Due(c)}.</p>" +
+        "<p>Desicon's target is acceptance within 3 working days of delivery; delays on our side must not look like delaying payment.</p>" +
         $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
 
     public static OutboundNotification Escalation(InvoiceCase c, string to, string workbenchUrl) => new(
         c.Id, nameof(Escalation), NotificationChannel.Email, to,
         $"Overdue: {c.Reference} with {c.AssignedReviewerName}",
-        $"<p>Invoice <strong>{E(c.Reference)}</strong> from {E(c.VendorName)} passed its verification deadline ({Due(c)}). It is assigned to {E(c.AssignedReviewerName)}.</p>" +
-        $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+        $"<p>Invoice <strong>{E(c.Reference)}</strong> from {E(c.VendorName)} passed its deadline ({Due(c)}) while with {E(c.AssignedReviewerName)}.</p>" +
+        Summary(c) + $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
 
-    public static OutboundNotification ReadyForAccountsPayable(InvoiceCase c, string to, string workbenchUrl) => new(
-        c.Id, nameof(ReadyForAccountsPayable), NotificationChannel.Email, to,
-        $"Verified: {c.Reference} — {c.VendorName} — ready for AP",
-        $"<p>Invoice <strong>{E(c.Reference)}</strong> has been verified and is ready for Accounts Payable processing.</p>" +
-        $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+    private static string Summary(InvoiceCase c) =>
+        $"<p>Vendor: {E(c.VendorName)} ({E(c.VendorNo)})<br/>Invoice: {E(c.InvoiceNumber)}<br/>PO/SO: {E(c.OrderNumber)}<br/>Amount: {E(c.Currency)} {c.Amount?.ToString("N2", CultureInfo.InvariantCulture)}</p>";
+
+    private static string InvoiceLine(InvoiceCase c) =>
+        c.InvoiceNumber is null ? string.Empty : $" (invoice {E(c.InvoiceNumber)}, {E(c.Currency)} {c.Amount?.ToString("N2", CultureInfo.InvariantCulture)}, PO/SO {E(c.OrderNumber)})";
+
+    private static string Round(InvoiceCase c) => c.SubmissionRound > 1 ? " (corrected)" : string.Empty;
+
+    private static string Wat(DateTimeOffset? utc) =>
+        utc is { } d ? d.ToOffset(TimeSpan.FromHours(1)).ToString("ddd d MMM yyyy HH:mm 'WAT'", CultureInfo.InvariantCulture) : "—";
 
     private static string Due(InvoiceCase c) =>
         c.DueAtUtc is { } d

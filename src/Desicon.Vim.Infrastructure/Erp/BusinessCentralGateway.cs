@@ -19,7 +19,8 @@ namespace Desicon.Vim.Infrastructure.Erp;
 /// <list type="bullet">
 /// <item>vendors: <c>number</c>, <c>displayName</c>, <c>email</c>, <c>blocked</c> ("_x0020_" = not blocked, "Payment", "All").</item>
 /// <item>purchaseOrders (+ $expand=purchaseOrderLines): an order exists only until it is fully invoiced;
-/// API status "Open" = Released in the BC client; a posted receipt is detected from line <c>receivedQuantity</c>.</item>
+/// API status "Open" = Released in the BC client; received-not-invoiced value = line amount incl. tax ×
+/// (<c>receivedQuantity</c> − <c>invoicedQuantity</c>) / <c>quantity</c>.</item>
 /// <item>purchaseInvoices: posted invoices carry status "Open" or "Paid"; the API exposes no payment date or
 /// payment document number, so <see cref="ErpPaymentStatus.PaidOn"/> is approximated by <c>lastModifiedDateTime</c>.</item>
 /// <item>Vendor bank accounts are not exposed by API v2.0 — an AL custom API page is needed (Phase 2).</item>
@@ -64,18 +65,22 @@ public sealed class BusinessCentralGateway(
 
         var order = orders[0];
         var lines = order.PurchaseOrderLines ?? [];
-        var hasReceipt = order.FullyReceived || lines.Any(l => l.ReceivedQuantity > 0);
 
-        // Remaining (not yet invoiced) value including tax, pro-rata per line.
+        // Received but not yet invoiced, including tax, pro-rata per line: what a full-value invoice must equal.
+        decimal? receivedNotInvoiced = null;
         decimal? remaining = null;
         if (order.PurchaseOrderLines is not null)
         {
+            var priced = lines.Where(l => l.Quantity > 0).ToList();
+            receivedNotInvoiced = decimal.Round(
+                priced.Sum(l => l.AmountIncludingTax * Math.Max(0, l.ReceivedQuantity - l.InvoicedQuantity) / l.Quantity),
+                2);
             remaining = decimal.Round(
-                lines.Where(l => l.Quantity > 0)
-                    .Sum(l => l.AmountIncludingTax * (l.Quantity - l.InvoicedQuantity) / l.Quantity),
+                priced.Sum(l => l.AmountIncludingTax * (l.Quantity - l.InvoicedQuantity) / l.Quantity),
                 2);
         }
 
+        var hasReceipt = receivedNotInvoiced > 0 || (order.PurchaseOrderLines is null && order.FullyReceived);
         var currency = string.IsNullOrWhiteSpace(order.CurrencyCode) ? options.Value.LocalCurrencyCode : order.CurrencyCode.Trim();
 
         return new ErpOrderCheck(
@@ -84,7 +89,8 @@ public sealed class BusinessCentralGateway(
             IsOpen: string.Equals(order.Status, "Open", StringComparison.OrdinalIgnoreCase),
             HasPostedReceipt: hasReceipt,
             RemainingAmount: remaining,
-            Currency: currency);
+            Currency: currency,
+            ReceivedNotInvoicedAmount: receivedNotInvoiced);
     }
 
     public async Task<ErpPaymentStatus?> GetPaymentStatusAsync(string erpDocumentNumber, CancellationToken ct)

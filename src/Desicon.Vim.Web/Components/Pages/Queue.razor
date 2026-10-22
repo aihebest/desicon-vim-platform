@@ -34,31 +34,21 @@
         await InScope(async sp =>
         {
             var q = sp.GetRequiredService<ICaseQueries>();
-            if (me.HasRole(VimRole.DocumentController))
-            {
-                _sections.Add(new("New submissions to register", "No new submissions.",
-                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Received], PageSize: 50), default)));
-                _sections.Add(new("Registered, to send for verification", "Nothing waiting.",
-                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Registered], PageSize: 50), default)));
-            }
-
-            if (me.HasRole(VimRole.Reviewer))
-            {
-                _sections.Add(new("Assigned to me for verification", "Nothing assigned to you.",
-                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.UnderVerification], AssignedReviewerId: me.Id, PageSize: 50), default)));
-            }
-
             if (me.HasRole(VimRole.AccountsPayable))
             {
-                _sections.Add(new("Verified, ready for AP", "Nothing verified yet.",
-                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Verified], PageSize: 50), default)));
-                _sections.Add(new("In AP processing", "Nothing in progress.",
+                _sections.Add(new("Passed the automatic checks — confirm and accept", "Nothing waiting for Accounts.",
                     await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.WithAccountsPayable], PageSize: 50), default)));
+                _sections.Add(new("Accepted — record the Business Central entry", "Nothing waiting.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.Accepted], PageSize: 50), default)));
+                _sections.Add(new("Returned to vendors (resubmit for those without portal access)", "Nothing returned.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.ReturnedToVendor], PageSize: 50), default)));
             }
 
             if (me.HasRole(VimRole.FinanceManager))
             {
-                _sections.Add(new("Overdue reviews", "No overdue reviews.",
+                _sections.Add(new("Exceptions waiting for your decision", "No exceptions.",
+                    await q.SearchAsync(new CaseSearch(Statuses: [CaseStatus.ExceptionReview], PageSize: 50), default)));
+                _sections.Add(new("Overdue (Accounts or exceptions)", "Nothing overdue.",
                     await q.SearchAsync(new CaseSearch(OverdueOnly: true, PageSize: 50), default)));
             }
         });

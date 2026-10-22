@@ -2,34 +2,28 @@ using Desicon.Vim.Domain.Cases;
 
 namespace Desicon.Vim.Domain.Workflow;
 
-/// <summary>Everything a person (or the system) can do to a case.</summary>
+/// <summary>Everything a person (or the system) can do to a case (workflow v2).</summary>
 public enum CaseAction
 {
-    /// <summary>DC confirms details, category and intake checklist.</summary>
-    Register,
-
-    /// <summary>Send back to the vendor with a reason (DC at intake, RO at verification).</summary>
+    /// <summary>System: the automatic checks found problems; rejected with reasons. Accounts or the Finance Manager can also reject.</summary>
     ReturnToVendor,
 
-    /// <summary>Vendor sent corrected documents against the same reference.</summary>
+    /// <summary>The vendor (or AP on their behalf) sent corrected documents against the same reference.</summary>
     Resubmit,
 
-    /// <summary>DC routes the case to the Responsible Officer for its category.</summary>
-    SendForVerification,
+    /// <summary>System: every automatic check passed; the case goes to Accounts.</summary>
+    PassToAccounts,
 
-    /// <summary>DC or Finance Manager moves the case to a different reviewer.</summary>
-    Reassign,
+    /// <summary>System: an automatic check needs a decision; the case goes to the Finance Manager.</summary>
+    RaiseException,
 
-    /// <summary>Assigned RO confirms the case against the verification checklist.</summary>
-    Verify,
+    /// <summary>Finance Manager: flags cleared, send the case on to Accounts.</summary>
+    ReleaseToAccounts,
 
-    /// <summary>AP Coordinator takes a verified case for final financial check.</summary>
-    AcceptForProcessing,
+    /// <summary>Accounts: confirmatory check passed. The vendor is told; credit days start.</summary>
+    Accept,
 
-    /// <summary>AP finds an issue that the RO must look at again.</summary>
-    SendBackToReviewer,
-
-    /// <summary>AP records the Business Central purchase invoice number.</summary>
+    /// <summary>Accounts records the Business Central purchase invoice number.</summary>
     RecordErpEntry,
 
     /// <summary>Payment confirmed (normally synchronised from Business Central).</summary>
@@ -62,22 +56,31 @@ public static class WorkflowRules
 
     public static IReadOnlyList<Transition> Transitions { get; } =
     [
-        T(CaseAction.Register, [CaseStatus.Received], CaseStatus.Registered, [VimRole.DocumentController]),
-        T(CaseAction.ReturnToVendor, [CaseStatus.Received, CaseStatus.Registered], CaseStatus.ReturnedToVendor, [VimRole.DocumentController], reason: true),
-        T(CaseAction.ReturnToVendor, [CaseStatus.UnderVerification], CaseStatus.ReturnedToVendor, [VimRole.Reviewer], reason: true),
-        T(CaseAction.Resubmit, [CaseStatus.ReturnedToVendor], CaseStatus.Received, [VimRole.System, VimRole.DocumentController]),
-        T(CaseAction.SendForVerification, [CaseStatus.Registered], CaseStatus.UnderVerification, [VimRole.DocumentController]),
-        T(CaseAction.Reassign, [CaseStatus.UnderVerification], null, [VimRole.DocumentController, VimRole.FinanceManager], reason: true),
-        T(CaseAction.Verify, [CaseStatus.UnderVerification], CaseStatus.Verified, [VimRole.Reviewer]),
-        T(CaseAction.AcceptForProcessing, [CaseStatus.Verified], CaseStatus.WithAccountsPayable, [VimRole.AccountsPayable]),
-        T(CaseAction.SendBackToReviewer, [CaseStatus.WithAccountsPayable], CaseStatus.UnderVerification, [VimRole.AccountsPayable], reason: true),
-        T(CaseAction.RecordErpEntry, [CaseStatus.WithAccountsPayable], CaseStatus.EnteredInErp, [VimRole.AccountsPayable]),
+        // Automatic checks (system) on a new or resubmitted case.
+        T(CaseAction.PassToAccounts, [CaseStatus.Received], CaseStatus.WithAccountsPayable, [VimRole.System]),
+        T(CaseAction.RaiseException, [CaseStatus.Received], CaseStatus.ExceptionReview, [VimRole.System]),
+        T(CaseAction.ReturnToVendor, [CaseStatus.Received], CaseStatus.ReturnedToVendor, [VimRole.System], reason: true),
+
+        // Finance Manager decides exceptions.
+        T(CaseAction.ReleaseToAccounts, [CaseStatus.ExceptionReview], CaseStatus.WithAccountsPayable, [VimRole.FinanceManager]),
+        T(CaseAction.ReturnToVendor, [CaseStatus.ExceptionReview], CaseStatus.ReturnedToVendor, [VimRole.FinanceManager], reason: true),
+
+        // Accounts' confirmatory check: accept (official submission) or reject with reasons.
+        T(CaseAction.Accept, [CaseStatus.WithAccountsPayable], CaseStatus.Accepted, [VimRole.AccountsPayable]),
+        T(CaseAction.ReturnToVendor, [CaseStatus.WithAccountsPayable], CaseStatus.ReturnedToVendor, [VimRole.AccountsPayable], reason: true),
+
+        // Corrected documents start the checks again.
+        T(CaseAction.Resubmit, [CaseStatus.ReturnedToVendor], CaseStatus.Received, [VimRole.Vendor, VimRole.AccountsPayable, VimRole.System]),
+
+        // After acceptance (legacy Verified/WithAccountsPayable cases created by workflow v1 end here too).
+        T(CaseAction.RecordErpEntry, [CaseStatus.Accepted], CaseStatus.EnteredInErp, [VimRole.AccountsPayable]),
         T(CaseAction.RecordPayment, [CaseStatus.EnteredInErp], CaseStatus.Paid, [VimRole.System, VimRole.AccountsPayable]),
         T(CaseAction.Close, [CaseStatus.Paid], CaseStatus.Closed, [VimRole.System, VimRole.AccountsPayable]),
         T(CaseAction.Cancel,
-            [CaseStatus.Received, CaseStatus.Registered, CaseStatus.ReturnedToVendor, CaseStatus.UnderVerification, CaseStatus.Verified],
+            [CaseStatus.Received, CaseStatus.ReturnedToVendor, CaseStatus.ExceptionReview, CaseStatus.WithAccountsPayable,
+             CaseStatus.Registered, CaseStatus.UnderVerification, CaseStatus.Verified],
             CaseStatus.Cancelled,
-            [VimRole.DocumentController, VimRole.FinanceManager],
+            [VimRole.FinanceManager],
             reason: true),
     ];
 

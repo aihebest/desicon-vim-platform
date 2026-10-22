@@ -45,4 +45,5 @@ public static class RuleCodes
     public const string BlockingFlagOpen = "BLOCKING_FLAG_OPEN";
     public const string MissingDetails = "MISSING_DETAILS";
     public const string InvalidValue = "INVALID_VALUE";
+    public const string MissingDocuments = "MISSING_DOCUMENTS";
 }

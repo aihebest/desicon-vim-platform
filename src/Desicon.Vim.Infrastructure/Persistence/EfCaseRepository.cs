@@ -65,9 +65,18 @@ public sealed class EfCaseRepository(VimDbContext db) : ICaseRepository
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct) =>
+        await WithChildren()
+            .Where(c => c.Status == CaseStatus.Received
+                && (c.Channel == SubmissionChannel.Portal || c.Channel == SubmissionChannel.Assisted))
+            .OrderBy(c => c.LastChangedAtUtc)
+            .Take(50)
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+
     public async Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
         await WithChildren()
-            .Where(c => c.Status == CaseStatus.UnderVerification
+            .Where(c => (c.Status == CaseStatus.WithAccountsPayable || c.Status == CaseStatus.ExceptionReview)
                 && !c.ReminderSent
                 && c.ReminderAtUtc != null
                 && c.ReminderAtUtc <= nowUtc)
@@ -78,7 +87,7 @@ public sealed class EfCaseRepository(VimDbContext db) : ICaseRepository
 
     public async Task<IReadOnlyList<InvoiceCase>> GetOverdueNotEscalatedAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
         await WithChildren()
-            .Where(c => c.Status == CaseStatus.UnderVerification
+            .Where(c => (c.Status == CaseStatus.WithAccountsPayable || c.Status == CaseStatus.ExceptionReview)
                 && c.EscalatedAtUtc == null
                 && c.DueAtUtc != null
                 && c.DueAtUtc < nowUtc)

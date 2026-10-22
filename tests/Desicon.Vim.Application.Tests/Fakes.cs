@@ -49,11 +49,16 @@ internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboun
     public Task<IReadOnlyList<InvoiceCase>> GetWithPendingScansAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Documents.Any(d => d.ScanStatus == ScanStatus.Pending)).ToList());
 
+    public Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.Received && c.Channel is SubmissionChannel.Portal or SubmissionChannel.Assisted).ToList());
+
+    private static bool WithHolder(InvoiceCase c) => c.Status is CaseStatus.WithAccountsPayable or CaseStatus.ExceptionReview;
+
     public Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.UnderVerification && !c.ReminderSent && c.ReminderAtUtc <= nowUtc).ToList());
+        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => WithHolder(c) && !c.ReminderSent && c.ReminderAtUtc <= nowUtc).ToList());
 
     public Task<IReadOnlyList<InvoiceCase>> GetOverdueNotEscalatedAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.UnderVerification && c.EscalatedAtUtc is null && c.DueAtUtc < nowUtc).ToList());
+        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => WithHolder(c) && c.EscalatedAtUtc is null && c.DueAtUtc < nowUtc).ToList());
 
     public Task<IReadOnlyList<InvoiceCase>> GetAwaitingPaymentAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.EnteredInErp).ToList());
@@ -121,14 +126,19 @@ internal sealed class FakeErp : IErpGateway
 
     public Dictionary<string, ErpVendor> Vendors { get; } = [];
 
-    public ErpOrderCheck Order { get; set; } = new(true, true, true, true, 10_000_000m, "NGN");
+    public ErpOrderCheck Order { get; set; } = new(true, true, true, true, 10_000_000m, "NGN", ReceivedNotInvoicedAmount: 1_000_000m);
 
-    public Task<ErpVendor?> GetVendorAsync(string vendorNo, CancellationToken ct) => Task.FromResult(Vendors.GetValueOrDefault(vendorNo));
+    /// <summary>When set, every call throws (Business Central unreachable).</summary>
+    public bool Down { get; set; }
+
+    public Task<ErpVendor?> GetVendorAsync(string vendorNo, CancellationToken ct) =>
+        Down ? throw new HttpRequestException("Business Central unavailable") : Task.FromResult(Vendors.GetValueOrDefault(vendorNo));
 
     public Task<IReadOnlyList<ErpVendor>> FindVendorsByEmailAsync(string email, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<ErpVendor>>(Vendors.Values.Where(v => v.Emails.Contains(email, StringComparer.OrdinalIgnoreCase)).ToList());
 
-    public Task<ErpOrderCheck> CheckOrderAsync(string vendorNo, string orderNumber, CancellationToken ct) => Task.FromResult(Order);
+    public Task<ErpOrderCheck> CheckOrderAsync(string vendorNo, string orderNumber, CancellationToken ct) =>
+        Down ? throw new HttpRequestException("Business Central unavailable") : Task.FromResult(Order);
 
     public Task<ErpPaymentStatus?> GetPaymentStatusAsync(string erpDocumentNumber, CancellationToken ct) => Task.FromResult<ErpPaymentStatus?>(null);
 }
@@ -140,5 +150,6 @@ internal static class Opts
         WorkbenchUrl = "https://vim.desicon.example",
         FinanceManagerEmail = "finance.manager@desicon.example",
         AccountsPayableEmail = "ap@desicon.example",
+        ManagementEscalationEmail = "dmd.office@desicon.example",
     });
 }

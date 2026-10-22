@@ -259,6 +259,9 @@ namespace Desicon.Vim.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("AcceptedAtUtc")
+                        .HasColumnType("datetimeoffset");
+
                     b.Property<decimal?>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
@@ -293,6 +296,9 @@ namespace Desicon.Vim.Infrastructure.Persistence.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("nchar(3)")
                         .IsFixedLength();
+
+                    b.Property<DateOnly?>("DeliveredOn")
+                        .HasColumnType("date");
 
                     b.Property<DateTimeOffset?>("DueAtUtc")
                         .HasColumnType("datetimeoffset");

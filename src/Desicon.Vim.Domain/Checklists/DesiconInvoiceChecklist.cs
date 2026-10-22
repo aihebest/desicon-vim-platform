@@ -9,7 +9,9 @@ namespace Desicon.Vim.Domain.Checklists;
 /// </summary>
 public static class DesiconInvoiceChecklist
 {
-    public const string CurrentVersion = "FIN-CHK-1";
+    public const string Version1Code = "FIN-CHK-1";
+
+    public const string CurrentVersion = "FIN-CHK-2";
 
     private const string Prep = "Invoice preparation";
     private const string Address = "Invoice address";
@@ -17,7 +19,11 @@ public static class DesiconInvoiceChecklist
     private const string Integrity = "Document integrity";
     private const string Review = "Responsible Officer review (SOP 7.4)";
 
-    public static ChecklistDefinition Version1 { get; } = new(CurrentVersion,
+    /// <summary>The checklist in use: what Accounts confirms by eye (workflow v2).</summary>
+    public static ChecklistDefinition Current => Version2;
+
+    /// <summary>Legacy (workflow v1): Document Controller intake and Responsible Officer verification.</summary>
+    public static ChecklistDefinition Version1 { get; } = new(Version1Code,
     [
         // ---- Intake: Document Controller ----
         new("PREP_LETTERHEAD", ChecklistStage.Intake, Prep, "Invoice is on the vendor's letter-headed paper", AppliesTo.All),
@@ -56,5 +62,29 @@ public static class DesiconInvoiceChecklist
 
         new("REV_RECEIVER_SIGNED", ChecklistStage.Verification, Review, "Delivery note / GRV / WCC signed by an authorised Desicon receiver", AppliesTo.All),
         new("REV_AUTHENTIC", ChecklistStage.Verification, Review, "Documents appear authentic and consistent with each other", AppliesTo.All),
+    ]);
+
+    private const string Accounts = "Accounts confirmatory check";
+
+    /// <summary>
+    /// Workflow v2 (stakeholder meeting, Oct 2026): the department verifies delivery
+    /// before the vendor can invoice (GRV / TRV posted in Business Central), and the
+    /// system checks the document slots, PO, received value and duplicates. Accounts
+    /// confirms only what a person must read on the documents.
+    /// </summary>
+    public static ChecklistDefinition Version2 { get; } = new(CurrentVersion,
+    [
+        new("ACC_LETTERHEAD", ChecklistStage.AccountsCheck, Prep, "Invoice is on the vendor's letter-headed paper", AppliesTo.All),
+        new("ACC_STANDARD", ChecklistStage.AccountsCheck, Prep, "Standard invoice, not a proforma invoice", AppliesTo.All),
+        new("ACC_MATCHES_ENTRY", ChecklistStage.AccountsCheck, Prep, "Invoice number, date, amount and PO / SO on the PDF match what was submitted", AppliesTo.All),
+        new("ACC_DESCRIPTION", ChecklistStage.AccountsCheck, Prep, "Clear description of items delivered or service rendered", AppliesTo.All),
+        new("ACC_AMOUNT_WORDS", ChecklistStage.AccountsCheck, Prep, "Invoice amount is stated in words and figures", AppliesTo.All),
+        new("ACC_VAT", ChecklistStage.AccountsCheck, Prep, "VAT is shown separately on the invoice", AppliesTo.All, AllowNotApplicable: true),
+        new("ACC_TAX_ID", ChecklistStage.AccountsCheck, Prep, "Vendor's Tax ID is shown", AppliesTo.All),
+        new("ACC_BANK", ChecklistStage.AccountsCheck, Prep, "Bank details on the invoice match the Business Central vendor card (account name, number, bank, currency)", AppliesTo.All),
+        new("ACC_BILL_TO", ChecklistStage.AccountsCheck, Address, "Addressed to Accounts Payable, Desicon Engineering Limited, 60 King Perekule Street, GRA Phase 2, Port Harcourt, Rivers State", AppliesTo.All),
+        new("ACC_RECEIVER_SIGNED", ChecklistStage.AccountsCheck, Accounts, "GRV / WCC is signed by an authorised Desicon receiver", AppliesTo.All),
+        new("ACC_AUTHENTIC", ChecklistStage.AccountsCheck, Accounts, "Documents appear authentic and consistent with each other", AppliesTo.All),
+        new("ACC_LEGIBLE", ChecklistStage.AccountsCheck, Integrity, "All documents are clear, legible and free from blurring and mutilation", AppliesTo.All),
     ]);
 }

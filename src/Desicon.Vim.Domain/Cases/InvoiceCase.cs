@@ -65,10 +65,15 @@ public sealed class InvoiceCase
 
     public string? CategoryCode { get; private set; }
 
+    /// <summary>When the goods were delivered or the service completed (from the waybill / WCC). Start of the 3-working-day target.</summary>
+    public DateOnly? DeliveredOn { get; private set; }
+
     // ---- Suggested by Document Intelligence ----
     public string? ExtractedJson { get; private set; }
 
     // ---- People ----
+
+    /// <summary>Who submitted: the vendor's portal identity, or the Accounts Payable officer who keyed it in (assisted).</summary>
     public string? RegisteredById { get; private set; }
 
     public string? AssignedReviewerId { get; private set; }
@@ -80,7 +85,14 @@ public sealed class InvoiceCase
 
     public string? VerifiedById { get; private set; }
 
+    /// <summary>The Accounts officer who accepted the case.</summary>
     public string? ApProcessedById { get; private set; }
+
+    /// <summary>
+    /// Official submission time: when Accounts accepted the case and the vendor was told.
+    /// The vendor's credit period counts from here (DMD, 19 Oct 2026).
+    /// </summary>
+    public DateTimeOffset? AcceptedAtUtc { get; private set; }
 
     // ---- Deadlines ----
     public DateTimeOffset? DueAtUtc { get; private set; }
@@ -164,6 +176,60 @@ public sealed class InvoiceCase
         return c;
     }
 
+    /// <summary>
+    /// A vendor submission with its details (portal, or assisted by Accounts Payable).
+    /// The automatic checks then decide where it goes.
+    /// </summary>
+    public static InvoiceCase Submit(string reference, SubmissionChannel channel, InvoiceSubmission submission, ActionContext ctx)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(reference);
+        ArgumentNullException.ThrowIfNull(submission);
+        ArgumentNullException.ThrowIfNull(ctx);
+
+        var allowed = channel switch
+        {
+            SubmissionChannel.Portal => ctx.Actor.HasRole(VimRole.Vendor),
+            SubmissionChannel.Assisted => ctx.Actor.HasRole(VimRole.AccountsPayable),
+            _ => false,
+        };
+        if (!allowed)
+        {
+            throw new DomainRuleException(RuleCodes.RoleNotPermitted, channel == SubmissionChannel.Assisted
+                ? "Only Accounts Payable can submit an invoice on a vendor's behalf."
+                : $"{ctx.Actor.DisplayName} cannot submit through the {channel} channel.");
+        }
+
+        var problems = submission.Problems(DateOnly.FromDateTime(ctx.NowUtc.ToOffset(TimeSpan.FromHours(1)).DateTime));
+        if (problems.Count > 0)
+        {
+            throw new DomainRuleException(RuleCodes.MissingDetails, string.Join(" ", problems));
+        }
+
+        var c = new InvoiceCase
+        {
+            Id = Guid.CreateVersion7(ctx.NowUtc),
+            Reference = reference,
+            Status = CaseStatus.Received,
+            Channel = channel,
+            ReceivedAtUtc = ctx.NowUtc,
+            SubmissionRound = 1,
+            LastChangedAtUtc = ctx.NowUtc,
+            RegisteredById = ctx.Actor.Id,
+        };
+        c.ApplySubmission(submission);
+        c.Audit("Submitted", null, CaseStatus.Received, ctx, null, new
+        {
+            channel,
+            submission.VendorNo,
+            submission.InvoiceNumber,
+            submission.Amount,
+            submission.Currency,
+            submission.OrderNumber,
+            submission.DeliveredOn,
+        });
+        return c;
+    }
+
     // =====================================================================
     // Documents, extraction, flags (no status change)
     // =====================================================================
@@ -230,7 +296,7 @@ public sealed class InvoiceCase
         var fmOnly = FlagCodes.RequiresFinanceManager(flag);
         var permitted = fmOnly
             ? ctx.Actor.HasRole(VimRole.FinanceManager)
-            : ctx.Actor.HasAnyRole([VimRole.FinanceManager, VimRole.DocumentController, VimRole.AccountsPayable]);
+            : ctx.Actor.HasAnyRole([VimRole.FinanceManager, VimRole.AccountsPayable]);
         if (!permitted)
         {
             throw new DomainRuleException(RuleCodes.RoleNotPermitted, fmOnly
@@ -240,7 +306,7 @@ public sealed class InvoiceCase
 
         if (ctx.Actor.Id == RegisteredById || ctx.Actor.Id == ApProcessedById)
         {
-            throw new DomainRuleException(RuleCodes.SegregationOfDuties, "The person who registered or is processing this case cannot clear its flags.");
+            throw new DomainRuleException(RuleCodes.SegregationOfDuties, "The person who submitted or accepted this case cannot clear its flags.");
         }
 
         flag.Resolve(resolution, ctx);
@@ -248,138 +314,121 @@ public sealed class InvoiceCase
     }
 
     // =====================================================================
-    // Workflow actions
+    // Workflow actions (v2: vendor submits -> automatic checks -> Accounts)
     // =====================================================================
 
-    public void Register(InvoiceDetails details, IReadOnlyCollection<ChecklistResponse> intakeAnswers, ChecklistDefinition checklist, ActionContext ctx)
+    /// <summary>System: every automatic check passed. Accounts must confirm by the deadline.</summary>
+    public void PassToAccounts(StageDeadline deadline, ActionContext ctx)
     {
-        ArgumentNullException.ThrowIfNull(details);
-        ArgumentNullException.ThrowIfNull(checklist);
-        var t = WorkflowRules.Resolve(CaseAction.Register, Status, ctx.Actor);
-
-        var problems = details.Problems();
-        if (problems.Count > 0)
-        {
-            throw new DomainRuleException(RuleCodes.MissingDetails, string.Join(" ", problems));
-        }
-
-        if (_documents.Count == 0)
-        {
-            throw new DomainRuleException(RuleCodes.MissingDetails, "At least one document must be attached before registration.");
-        }
-
-        if (_documents.Any(d => d.ScanStatus is ScanStatus.Malicious or ScanStatus.ScanFailed))
-        {
-            throw new DomainRuleException(RuleCodes.BlockingFlagOpen, "A document failed or could not complete the malware scan. Return the package to the vendor.");
-        }
-
-        EnsureChecklistPassed(checklist, ChecklistStage.Intake, details.SupplyType, intakeAnswers, "intake");
-
-        VendorName = details.VendorName.Trim();
-        VendorNo = details.VendorNo?.Trim();
-        InvoiceNumber = details.InvoiceNumber.Trim();
-        InvoiceDate = details.InvoiceDate;
-        Amount = details.Amount;
-        Currency = details.Currency.Trim().ToUpperInvariant();
-        OrderNumber = details.OrderNumber.Trim();
-        SupplyType = details.SupplyType;
-        CategoryCode = details.CategoryCode;
-        RegisteredById = ctx.Actor.Id;
-
-        SaveAnswers(checklist, ChecklistStage.Intake, intakeAnswers, ctx);
-        Move(t, ctx, null, new { details.VendorName, details.InvoiceNumber, details.Amount, details.Currency, details.OrderNumber, details.CategoryCode, checklist = checklist.Version });
+        ArgumentNullException.ThrowIfNull(deadline);
+        var t = WorkflowRules.Resolve(CaseAction.PassToAccounts, Status, ctx.Actor);
+        EnsureCompleteAndClean();
+        EnsureNoBlockingFlags();
+        SetDeadline(deadline);
+        Move(t, ctx, null, new { deadline.DueAtUtc });
     }
 
+    /// <summary>System: an automatic check raised a blocking flag that needs the Finance Manager's decision.</summary>
+    public void RaiseException(StageDeadline deadline, ActionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(deadline);
+        var t = WorkflowRules.Resolve(CaseAction.RaiseException, Status, ctx.Actor);
+        if (!HasOpenBlockingFlags)
+        {
+            throw new DomainRuleException(RuleCodes.InvalidValue, "An exception needs at least one open blocking flag.");
+        }
+
+        SetDeadline(deadline);
+        Move(t, ctx, null, new { flags = _flags.Where(f => f.IsOpen && f.Blocking).Select(f => f.Code), deadline.DueAtUtc });
+    }
+
+    /// <summary>Finance Manager: the flags are cleared; send the case on to Accounts.</summary>
+    public void ReleaseToAccounts(StageDeadline deadline, ActionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(deadline);
+        var t = WorkflowRules.Resolve(CaseAction.ReleaseToAccounts, Status, ctx.Actor);
+        if (ctx.Actor.Id == RegisteredById)
+        {
+            throw new DomainRuleException(RuleCodes.SegregationOfDuties, "The person who submitted this invoice cannot release it.");
+        }
+
+        EnsureNoBlockingFlags();
+        EnsureCompleteAndClean();
+        SetDeadline(deadline);
+        Move(t, ctx, null, new { deadline.DueAtUtc });
+    }
+
+    /// <summary>
+    /// Rejected with reasons: automatically (system, at the checks), by the Finance Manager
+    /// (exception) or by Accounts (confirmatory check). No credit days run while returned.
+    /// </summary>
     public void ReturnToVendor(string reason, ActionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var t = WorkflowRules.Resolve(CaseAction.ReturnToVendor, Status, ctx.Actor);
         RequireReason(reason);
-        if (Status == CaseStatus.UnderVerification)
-        {
-            EnsureAssignedReviewer(ctx.Actor);
-        }
-
         ClearDeadline();
         Move(t, ctx, reason, null);
     }
 
-    public void Resubmit(string? subject, ActionContext ctx)
+    /// <summary>
+    /// Corrected details against the same reference. New documents are attached
+    /// afterwards (round + 1); the automatic checks then run again from the start.
+    /// </summary>
+    public void Resubmit(InvoiceSubmission corrected, ActionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(corrected);
+        ArgumentNullException.ThrowIfNull(ctx);
+        var t = WorkflowRules.Resolve(CaseAction.Resubmit, Status, ctx.Actor);
+        var problems = corrected.Problems(DateOnly.FromDateTime(ctx.NowUtc.ToOffset(TimeSpan.FromHours(1)).DateTime));
+        if (problems.Count > 0)
+        {
+            throw new DomainRuleException(RuleCodes.MissingDetails, string.Join(" ", problems));
+        }
+
+        if (!string.Equals(corrected.VendorNo.Trim(), VendorNo, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleException(RuleCodes.InvalidValue, "A resubmission must be for the same vendor.");
+        }
+
+        SubmissionRound++;
+        ApplySubmission(corrected);
+        RegisteredById = ctx.Actor.Id;
+        ExtractedJson = null;
+        AcceptedAtUtc = null;
+        ApProcessedById = null;
+        Move(t, ctx, null, new { round = SubmissionRound, corrected.InvoiceNumber, corrected.Amount, corrected.OrderNumber });
+    }
+
+    /// <summary>Legacy email intake: a reply quoting the reference reopens a returned case.</summary>
+    public void ResubmitByEmail(string? subject, ActionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(ctx);
         var t = WorkflowRules.Resolve(CaseAction.Resubmit, Status, ctx.Actor);
         SubmissionRound++;
         SubmissionSubject = subject ?? SubmissionSubject;
-        ExtractedJson = null; // fields read from the previous round must not be reused
-
-        // Earlier verification no longer applies to the corrected package.
-        AssignedReviewerId = null;
-        AssignedReviewerName = null;
-        ReviewerDelegateIds = string.Empty;
-        VerifiedById = null;
+        ExtractedJson = null;
         Move(t, ctx, null, new { round = SubmissionRound, subject });
     }
 
-    public void SendForVerification(ReviewerAssignment assignment, ActionContext ctx)
-    {
-        ArgumentNullException.ThrowIfNull(assignment);
-        var t = WorkflowRules.Resolve(CaseAction.SendForVerification, Status, ctx.Actor);
-        EnsureIndependentReviewer(assignment, ctx.Actor);
-        Assign(assignment);
-        Move(t, ctx, null, new { assignment.ReviewerId, assignment.ReviewerName, assignment.DueAtUtc });
-    }
-
-    public void Reassign(ReviewerAssignment assignment, string reason, ActionContext ctx)
-    {
-        ArgumentNullException.ThrowIfNull(assignment);
-        var t = WorkflowRules.Resolve(CaseAction.Reassign, Status, ctx.Actor);
-        RequireReason(reason);
-        EnsureIndependentReviewer(assignment, ctx.Actor);
-        var previous = AssignedReviewerId;
-        Assign(assignment);
-        Move(t, ctx, reason, new { previous, assignment.ReviewerId, assignment.ReviewerName, assignment.DueAtUtc });
-    }
-
-    public void Verify(IReadOnlyCollection<ChecklistResponse> verificationAnswers, ChecklistDefinition checklist, ActionContext ctx)
+    /// <summary>
+    /// Accounts' confirmatory check. On success this is the official submission:
+    /// the vendor is told and the credit period starts now.
+    /// </summary>
+    public void Accept(IReadOnlyCollection<ChecklistResponse> answers, ChecklistDefinition checklist, ActionContext ctx)
     {
         ArgumentNullException.ThrowIfNull(checklist);
-        var t = WorkflowRules.Resolve(CaseAction.Verify, Status, ctx.Actor);
-        EnsureAssignedReviewer(ctx.Actor);
+        var t = WorkflowRules.Resolve(CaseAction.Accept, Status, ctx.Actor);
+        EnsureIndependentOfEarlierSteps(ctx.Actor, "accept it");
+        EnsureNoBlockingFlags();
+        EnsureCompleteAndClean();
+        EnsureChecklistPassed(checklist, ChecklistStage.AccountsCheck, SupplyType, answers, "Accounts");
 
-        if (ctx.Actor.Id == RegisteredById)
-        {
-            throw new DomainRuleException(RuleCodes.SegregationOfDuties, "The person who registered a case cannot also verify it.");
-        }
-
-        EnsureChecklistPassed(checklist, ChecklistStage.Verification, SupplyType, verificationAnswers, "verification");
-
-        VerifiedById = ctx.Actor.Id;
-        SaveAnswers(checklist, ChecklistStage.Verification, verificationAnswers, ctx);
-        ClearDeadline();
-        Move(t, ctx, null, new { checklist = checklist.Version });
-    }
-
-    public void AcceptForProcessing(ActionContext ctx)
-    {
-        ArgumentNullException.ThrowIfNull(ctx);
-        var t = WorkflowRules.Resolve(CaseAction.AcceptForProcessing, Status, ctx.Actor);
-        EnsureIndependentOfEarlierSteps(ctx.Actor, "accept it for processing");
-        EnsureReadyForPayment();
-
+        SaveAnswers(checklist, ChecklistStage.AccountsCheck, answers, ctx);
         ApProcessedById = ctx.Actor.Id;
-        Move(t, ctx, null, null);
-    }
-
-    public void SendBackToReviewer(string reason, ReviewerAssignment assignment, ActionContext ctx)
-    {
-        ArgumentNullException.ThrowIfNull(assignment);
-        var t = WorkflowRules.Resolve(CaseAction.SendBackToReviewer, Status, ctx.Actor);
-        RequireReason(reason);
-        EnsureIndependentReviewer(assignment, ctx.Actor);
-        VerifiedById = null;
-        ApProcessedById = null;
-        Assign(assignment);
-        Move(t, ctx, reason, new { assignment.ReviewerId, assignment.DueAtUtc });
+        AcceptedAtUtc = ctx.NowUtc;
+        ClearDeadline();
+        Move(t, ctx, null, new { checklist = checklist.Version, acceptedAtUtc = AcceptedAtUtc });
     }
 
     public void RecordErpEntry(string erpDocumentNumber, ActionContext ctx)
@@ -392,7 +441,6 @@ public sealed class InvoiceCase
         }
 
         EnsureIndependentOfEarlierSteps(ctx.Actor, "record its ERP entry");
-        EnsureReadyForPayment();
         ErpDocumentNumber = erpDocumentNumber.Trim();
         Move(t, ctx, null, new { erpDocumentNumber = ErpDocumentNumber });
     }
@@ -452,13 +500,34 @@ public sealed class InvoiceCase
         return WorkflowRules.AvailableActions(Status, actor)
             .Where(a => a switch
             {
-                CaseAction.Verify => IsAssignedReviewer(actor) && actor.Id != RegisteredById,
-                CaseAction.ReturnToVendor when Status == CaseStatus.UnderVerification => IsAssignedReviewer(actor),
-                CaseAction.AcceptForProcessing or CaseAction.RecordErpEntry => IsIndependentOfEarlierSteps(actor),
+                CaseAction.Accept or CaseAction.RecordErpEntry => IsIndependentOfEarlierSteps(actor),
+                CaseAction.ReleaseToAccounts => actor.Id != RegisteredById,
                 _ => true,
             })
             .ToList();
     }
+
+    /// <summary>
+    /// The documents that count now: for each kind, those from the latest round that
+    /// supplied that kind. A corrected file in round 2 replaces the round-1 file.
+    /// </summary>
+    public IReadOnlyList<CaseDocument> CurrentDocuments =>
+        _documents
+            .GroupBy(d => d.Kind)
+            .SelectMany(g =>
+            {
+                var latest = g.Max(d => d.SubmissionRound);
+                return g.Where(d => d.SubmissionRound == latest);
+            })
+            .ToList();
+
+    /// <summary>Required slots with no document (empty for legacy email/physical cases).</summary>
+    public IReadOnlyList<DocumentKind> MissingRequiredDocuments =>
+        Channel is SubmissionChannel.Portal or SubmissionChannel.Assisted
+            ? RequiredDocuments.For(SupplyType).Where(k => !_documents.Any(d => d.Kind == k)).ToList()
+            : [];
+
+    public bool AllCurrentDocumentsScanned => CurrentDocuments.All(d => d.ScanStatus != ScanStatus.Pending);
 
     public void ClearNewAuditEvents() => _newAuditEvents.Clear();
 
@@ -466,37 +535,48 @@ public sealed class InvoiceCase
     // Internals
     // =====================================================================
 
-    public bool IsAssignedReviewer(Actor actor)
+    private void SetDeadline(StageDeadline d)
     {
-        ArgumentNullException.ThrowIfNull(actor);
-        return actor.HasRole(VimRole.Reviewer)
-            && (actor.Id == AssignedReviewerId || DelegateIdList.Contains(actor.Id, StringComparer.Ordinal));
-    }
-
-    private void Assign(ReviewerAssignment a)
-    {
-        AssignedReviewerId = a.ReviewerId;
-        AssignedReviewerName = a.ReviewerName;
-        ReviewerDelegateIds = string.Join(',', a.DelegateIds);
-        DueAtUtc = a.DueAtUtc;
-        ReminderAtUtc = a.ReminderAtUtc;
+        AssignedReviewerId = null;
+        AssignedReviewerName = d.HolderName;
+        ReviewerDelegateIds = string.Empty;
+        DueAtUtc = d.DueAtUtc;
+        ReminderAtUtc = d.ReminderAtUtc;
         ReminderSent = false;
         EscalatedAtUtc = null;
     }
 
     private void ClearDeadline()
     {
+        AssignedReviewerName = null;
         DueAtUtc = null;
         ReminderAtUtc = null;
         ReminderSent = false;
         EscalatedAtUtc = null;
     }
 
-    private void EnsureAssignedReviewer(Actor actor)
+    private void ApplySubmission(InvoiceSubmission s)
     {
-        if (!IsAssignedReviewer(actor))
+        VendorNo = s.VendorNo.Trim().ToUpperInvariant();
+        VendorName = s.VendorName.Trim();
+        SenderName = VendorName;
+        SenderEmail = string.IsNullOrWhiteSpace(s.VendorEmail) ? SenderEmail : s.VendorEmail.Trim().ToLowerInvariant();
+        InvoiceNumber = s.InvoiceNumber.Trim();
+        InvoiceDate = s.InvoiceDate;
+        Amount = s.Amount;
+        Currency = s.Currency.Trim().ToUpperInvariant();
+        OrderNumber = s.OrderNumber.Trim().ToUpperInvariant();
+        SupplyType = s.SupplyType;
+        DeliveredOn = s.DeliveredOn;
+        SubmissionSubject = $"{VendorName}_{InvoiceNumber}_{OrderNumber}";
+    }
+
+    /// <summary>Use when a vendor email is only known later (e.g. from the Business Central vendor card).</summary>
+    public void SetVendorEmailIfMissing(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(SenderEmail) && !string.IsNullOrWhiteSpace(email))
         {
-            throw new DomainRuleException(RuleCodes.NotAssignedReviewer, $"Only the assigned reviewer ({AssignedReviewerName}) or their delegate can act on this case.");
+            SenderEmail = email.Trim().ToLowerInvariant();
         }
     }
 
@@ -504,7 +584,7 @@ public sealed class InvoiceCase
     public IReadOnlyList<string> BlockingFlagResolverIds =>
         _flags.Where(f => f.Blocking && f.ResolvedById is not null).Select(f => f.ResolvedById!).Distinct().ToList();
 
-    /// <summary>AP must be someone other than the registrar, the verifier and anyone who cleared a blocking flag.</summary>
+    /// <summary>Accounts must be someone other than the submitter (assisted entry) and anyone who cleared a blocking flag.</summary>
     public bool IsIndependentOfEarlierSteps(Actor actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
@@ -515,31 +595,31 @@ public sealed class InvoiceCase
     {
         if (!IsIndependentOfEarlierSteps(actor))
         {
-            throw new DomainRuleException(RuleCodes.SegregationOfDuties, $"Someone who registered, verified or cleared a blocking flag on this case cannot also {what}.");
+            throw new DomainRuleException(RuleCodes.SegregationOfDuties, $"Someone who submitted or cleared a blocking flag on this case cannot also {what}.");
         }
     }
 
-    private void EnsureIndependentReviewer(ReviewerAssignment assignment, Actor actor)
-    {
-        if (assignment.ReviewerId == actor.Id || assignment.ReviewerId == RegisteredById
-            || assignment.DelegateIds.Contains(actor.Id, StringComparer.Ordinal))
-        {
-            throw new DomainRuleException(RuleCodes.SegregationOfDuties, "A case cannot be assigned to the person routing it or to the person who registered it.");
-        }
-    }
-
-    /// <summary>Before AP touches a case: no open blocking flags and every document scanned clean.</summary>
-    private void EnsureReadyForPayment()
+    private void EnsureNoBlockingFlags()
     {
         if (HasOpenBlockingFlags)
         {
             var codes = string.Join(", ", _flags.Where(f => f.IsOpen && f.Blocking).Select(f => f.Code));
             throw new DomainRuleException(RuleCodes.BlockingFlagOpen, $"Blocking flags must be cleared first: {codes}.");
         }
+    }
 
-        if (_documents.Any(d => d.ScanStatus != ScanStatus.Clean))
+    /// <summary>Every required slot filled and every current document scanned clean.</summary>
+    private void EnsureCompleteAndClean()
+    {
+        var missing = MissingRequiredDocuments;
+        if (missing.Count > 0)
         {
-            throw new DomainRuleException(RuleCodes.BlockingFlagOpen, "Every document must pass the malware scan before Accounts Payable can process the case.");
+            throw new DomainRuleException(RuleCodes.MissingDocuments, "Missing documents: " + string.Join(", ", missing.Select(RequiredDocuments.Label)) + ".");
+        }
+
+        if (CurrentDocuments.Any(d => d.ScanStatus != ScanStatus.Clean))
+        {
+            throw new DomainRuleException(RuleCodes.BlockingFlagOpen, "Every document must pass the malware scan first.");
         }
     }
 

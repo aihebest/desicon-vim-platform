@@ -95,7 +95,7 @@ public sealed class IntakeService(
             if (existing is { Status: CaseStatus.ReturnedToVendor }
                 && await IsTrustedResubmitterAsync(existing, email.FromAddress, ct).ConfigureAwait(false))
             {
-                existing.Resubmit(email.Subject, ctx);
+                existing.ResubmitByEmail(email.Subject, ctx);
                 invoiceCase = existing;
             }
         }

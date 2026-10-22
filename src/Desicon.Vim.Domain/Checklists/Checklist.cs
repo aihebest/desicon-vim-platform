@@ -5,11 +5,14 @@ namespace Desicon.Vim.Domain.Checklists;
 /// <summary>When in the process a checklist item is answered.</summary>
 public enum ChecklistStage
 {
-    /// <summary>Document Controller, at registration.</summary>
+    /// <summary>Legacy (workflow v1): Document Controller, at registration.</summary>
     Intake = 0,
 
-    /// <summary>Responsible Officer, at verification.</summary>
+    /// <summary>Legacy (workflow v1): Responsible Officer, at verification.</summary>
     Verification = 1,
+
+    /// <summary>Accounts' confirmatory check before acceptance (workflow v2).</summary>
+    AccountsCheck = 2,
 }
 
 /// <summary>Which packages an item applies to.</summary>
