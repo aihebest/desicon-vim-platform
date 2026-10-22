@@ -141,7 +141,7 @@ else
             if (vendor is not null)
             {
                 _f.VendorName ??= vendor.Name;
-                _f.VendorEmail ??= vendor.Emails.FirstOrDefault();
+                _f.VendorEmail ??= vendor.Emails.Count > 0 ? vendor.Emails[0] : null;
             }
         }
 #pragma warning disable CA1031 // A lookup is a convenience only.

@@ -101,9 +101,9 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
         var tolerance = options.Value.FullValueTolerance;
         if (Math.Abs(s.Amount - received.Value) > tolerance)
         {
-            rejections.Add(string.Create(CultureInfo.InvariantCulture,
-                $"The invoice amount ({currency} {s.Amount:N2}) does not equal the value received and not yet invoiced on {orderNo} ({currency} {received.Value:N2}, VAT included). " +
-                "Desicon accepts invoices for the full received value only."));
+            rejections.Add(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The invoice amount ({currency} {s.Amount:N2}) does not equal the value received and not yet invoiced on {orderNo} ({currency} {received.Value:N2}, VAT included). Desicon accepts invoices for the full received value only."));
         }
     }
 

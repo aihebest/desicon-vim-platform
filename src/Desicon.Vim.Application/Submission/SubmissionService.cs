@@ -169,7 +169,7 @@ public sealed class SubmissionService(
         try
         {
             var vendor = await erp.GetVendorAsync(c.VendorNo, ct).ConfigureAwait(false);
-            c.SetVendorEmailIfMissing(vendor?.Emails.FirstOrDefault());
+            c.SetVendorEmailIfMissing(vendor is { Emails.Count: > 0 } ? vendor.Emails[0] : null);
         }
 #pragma warning disable CA1031 // Best effort only.
         catch (Exception ex) when (ex is not OperationCanceledException)
