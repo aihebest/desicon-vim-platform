@@ -9,21 +9,31 @@ public sealed record ActionContext(Actor Actor, DateTimeOffset NowUtc, string Co
         new(actor, nowUtc, Guid.NewGuid().ToString("N"));
 }
 
-/// <summary>The invoice details the Document Controller confirms at registration.</summary>
-public sealed record InvoiceDetails(
+/// <summary>
+/// What the vendor (on the portal) or Accounts Payable (assisted submission) enters
+/// with the documents. Department verification has already happened: the GRV / TRV
+/// is posted in Business Central before the vendor can invoice.
+/// </summary>
+public sealed record InvoiceSubmission(
+    string VendorNo,
     string VendorName,
-    string? VendorNo,
+    string? VendorEmail,
     string InvoiceNumber,
     DateOnly InvoiceDate,
     decimal Amount,
     string Currency,
     string OrderNumber,
     SupplyType SupplyType,
-    string CategoryCode)
+    DateOnly DeliveredOn)
 {
-    public IReadOnlyList<string> Problems()
+    public IReadOnlyList<string> Problems(DateOnly today)
     {
         var p = new List<string>();
+        if (string.IsNullOrWhiteSpace(VendorNo))
+        {
+            p.Add("The Business Central vendor number is required.");
+        }
+
         if (string.IsNullOrWhiteSpace(VendorName))
         {
             p.Add("Vendor name is required.");
@@ -34,12 +44,17 @@ public sealed record InvoiceDetails(
             p.Add("Invoice number is required.");
         }
 
+        if (InvoiceDate == default || InvoiceDate > today)
+        {
+            p.Add("Invoice date is required and cannot be in the future.");
+        }
+
         if (Amount <= 0)
         {
             p.Add("Amount must be greater than zero.");
         }
 
-        if (string.IsNullOrWhiteSpace(Currency) || Currency.Length != 3)
+        if (string.IsNullOrWhiteSpace(Currency) || Currency.Trim().Length != 3)
         {
             p.Add("Currency must be a 3-letter code such as NGN or USD.");
         }
@@ -54,16 +69,59 @@ public sealed record InvoiceDetails(
             p.Add("Select materials (PO) or services (SO).");
         }
 
-        if (string.IsNullOrWhiteSpace(CategoryCode))
+        if (DeliveredOn == default || DeliveredOn > today)
         {
-            p.Add("Category is required.");
+            p.Add("Delivery / completion date is required and cannot be in the future.");
         }
 
         return p;
     }
 }
 
-/// <summary>Fields read from the invoice PDF by Document Intelligence. Suggestions only — the DC confirms.</summary>
+/// <summary>
+/// The document slots a submission must fill (Augustine's point at the stakeholder
+/// meeting): the system refuses a submission with a required slot empty.
+/// </summary>
+public static class RequiredDocuments
+{
+    private static readonly DocumentKind[] Materials =
+        [DocumentKind.Invoice, DocumentKind.WaybillOrDeliveryNote, DocumentKind.GoodsReceivedVoucher, DocumentKind.PurchaseOrder];
+
+    private static readonly DocumentKind[] Services =
+        [DocumentKind.Invoice, DocumentKind.WorkCompletionCertificate, DocumentKind.ServiceOrder];
+
+    private static readonly DocumentKind[] OptionalKinds =
+        [DocumentKind.Timesheet, DocumentKind.ThirdPartyInvoice, DocumentKind.Other];
+
+    public static IReadOnlyList<DocumentKind> For(SupplyType supply) => supply switch
+    {
+        SupplyType.Materials => Materials,
+        SupplyType.Services => Services,
+        _ => [DocumentKind.Invoice],
+    };
+
+    public static IReadOnlyList<DocumentKind> Optional(SupplyType supply) =>
+        supply == SupplyType.Services ? OptionalKinds : [DocumentKind.Other];
+
+    public static string Label(DocumentKind kind) => kind switch
+    {
+        DocumentKind.Invoice => "Invoice",
+        DocumentKind.WaybillOrDeliveryNote => "Waybill / delivery note",
+        DocumentKind.GoodsReceivedVoucher => "Goods Received Voucher (GRV), signed",
+        DocumentKind.PurchaseOrder => "Purchase Order",
+        DocumentKind.ServiceOrder => "Service Order",
+        DocumentKind.WorkCompletionCertificate => "Work Completion Certificate / TRV, signed",
+        DocumentKind.Timesheet => "Approved timesheets (if applicable)",
+        DocumentKind.ThirdPartyInvoice => "Third-party invoice (if applicable)",
+        DocumentKind.Other => "Other supporting document",
+        _ => kind.ToString(),
+    };
+}
+
+/// <summary>When the current holder of a case must act, and when to remind them.</summary>
+public sealed record StageDeadline(string HolderName, DateTimeOffset DueAtUtc, DateTimeOffset ReminderAtUtc);
+
+/// <summary>Fields read from the invoice PDF by Document Intelligence. Suggestions only.</summary>
 public sealed record ExtractedInvoiceFields(
     string? VendorName,
     string? InvoiceNumber,
@@ -73,9 +131,6 @@ public sealed record ExtractedInvoiceFields(
     string? OrderNumber,
     string? BankAccountNumber,
     double? Confidence);
-
-/// <summary>A reviewer assignment taken from the routing configuration.</summary>
-public sealed record ReviewerAssignment(string ReviewerId, string ReviewerName, IReadOnlyList<string> DelegateIds, DateTimeOffset DueAtUtc, DateTimeOffset ReminderAtUtc);
 
 public enum ScanStatus
 {
@@ -188,11 +243,12 @@ public static class FlagCodes
     public const string MaliciousAttachment = "MALICIOUS_ATTACHMENT";
     public const string SenderAuthenticationUnknown = "SENDER_AUTH_UNKNOWN";
     public const string BankDetailsUnverified = "BANK_DETAILS_UNVERIFIED";
+    public const string ErpUnavailable = "ERP_UNAVAILABLE";
 
     /// <summary>
     /// Rule: every BLOCKING flag can be cleared only by the Finance Manager, and
-    /// whoever clears it may not then process that case in AP. Non-blocking
-    /// (advisory) flags can be cleared by the DC, AP or Finance Manager.
+    /// whoever clears it may not then accept that case in Accounts. Non-blocking
+    /// (advisory) flags can be cleared by Accounts or the Finance Manager.
     /// </summary>
     public static bool RequiresFinanceManager(CaseFlag flag)
     {

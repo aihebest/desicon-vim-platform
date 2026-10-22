@@ -129,3 +129,9 @@ fieldset.checklist legend { font-weight: 600; padding: 0 6px; }
 .check-actions { display: flex; gap: 16px; align-items: center; margin: 4px 0 12px; }
 
 #blazor-error-ui { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--bad-bg); color: var(--bad); padding: 10px 24px; border-top: 1px solid #f5c2bd; }
+
+/* Workflow v2: document slots and link-buttons */
+.slot-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 6px 0; border-bottom: 1px dashed #e3e7ee; }
+.slot-row label.block { margin: 0; }
+a.button { display: inline-block; padding: 8px 14px; border-radius: 6px; border: 1px solid #0b4f8a; color: #0b4f8a; text-decoration: none; }
+a.button:hover { background: #0b4f8a; color: #fff; }

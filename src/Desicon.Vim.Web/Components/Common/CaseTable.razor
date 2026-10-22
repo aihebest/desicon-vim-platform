@@ -8,7 +8,7 @@ else
         <thead>
             <tr>
                 <th>Reference</th><th>Status</th><th>Vendor</th><th>Invoice</th><th class="num">Amount</th>
-                <th>Category</th><th>Reviewer</th><th>Due</th><th>Flags</th>
+                <th>PO / SO</th><th>With</th><th>Due</th><th>Flags</th>
             </tr>
         </thead>
         <tbody>
@@ -21,7 +21,7 @@ else
                     <td>@(c.VendorName ?? c.SenderEmail)</td>
                     <td>@c.InvoiceNumber</td>
                     <td class="num">@Format.Money(c.Amount, c.Currency)</td>
-                    <td>@c.CategoryCode</td>
+                    <td>@c.OrderNumber</td>
                     <td>@c.AssignedReviewerName</td>
                     <td class="@(overdue ? "overdue" : "")">@Format.Wat(c.DueAtUtc)</td>
                     <td>

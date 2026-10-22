@@ -47,6 +47,8 @@ internal sealed class InvoiceCaseConfiguration : IEntityTypeConfiguration<Invoic
         builder.Property(x => x.Currency).HasMaxLength(3).IsFixedLength();
         builder.Property(x => x.OrderNumber).HasMaxLength(50);
         builder.Property(x => x.CategoryCode).HasMaxLength(50);
+        builder.Property(x => x.DeliveredOn);
+        builder.Property(x => x.AcceptedAtUtc);
         builder.Property(x => x.ExtractedJson);
 
         builder.Property(x => x.RegisteredById).HasMaxLength(Len.EntraId);
@@ -89,6 +91,10 @@ internal sealed class InvoiceCaseConfiguration : IEntityTypeConfiguration<Invoic
         builder.Ignore(x => x.NewAuditEvents);
         builder.Ignore(x => x.HasOpenBlockingFlags);
         builder.Ignore(x => x.DelegateIdList);
+        builder.Ignore(x => x.CurrentDocuments);
+        builder.Ignore(x => x.MissingRequiredDocuments);
+        builder.Ignore(x => x.AllCurrentDocumentsScanned);
+        builder.Ignore(x => x.BlockingFlagResolverIds);
     }
 }
 

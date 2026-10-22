@@ -39,6 +39,6 @@ public sealed record DashboardFigures(
     IReadOnlyList<StageCount> ByStatus,
     int OverdueCount,
     int ReceivedLast30Days,
-    double? AverageHoursReceiptToVerified,
-    double? AverageHoursVerifiedToErp,
+    double? AverageHoursSubmittedToAccepted,
+    double? AverageHoursAcceptedToErp,
     IReadOnlyList<ReasonCount> TopReturnReasons);

@@ -13,6 +13,8 @@ namespace Desicon.Vim.Infrastructure.Persistence;
 /// </summary>
 public sealed class EfUnitOfWork(VimDbContext db) : IUnitOfWork
 {
+    public void DiscardChanges() => db.ChangeTracker.Clear();
+
     public async Task SaveChangesAsync(CancellationToken ct)
     {
         // Entries() runs DetectChanges, so new child rows (documents, flags...) are picked up first.

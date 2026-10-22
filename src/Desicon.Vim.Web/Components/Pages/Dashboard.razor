@@ -13,19 +13,19 @@ else
     <section class="tiles">
         <a class="tile @(_figures.OverdueCount > 0 ? "tile-alert" : "")" href="cases?overdue=true">
             <div class="tile-value">@_figures.OverdueCount</div>
-            <div class="tile-label">Overdue reviews</div>
+            <div class="tile-label">Overdue (Accounts / FM)</div>
         </a>
         <div class="tile">
             <div class="tile-value">@_figures.ReceivedLast30Days</div>
             <div class="tile-label">Received, last 30 days</div>
         </div>
         <div class="tile">
-            <div class="tile-value">@Hours(_figures.AverageHoursReceiptToVerified)</div>
-            <div class="tile-label">Avg. receipt → verified</div>
+            <div class="tile-value">@Hours(_figures.AverageHoursSubmittedToAccepted)</div>
+            <div class="tile-label">Avg. submitted → accepted</div>
         </div>
         <div class="tile">
-            <div class="tile-value">@Hours(_figures.AverageHoursVerifiedToErp)</div>
-            <div class="tile-label">Avg. verified → in ERP</div>
+            <div class="tile-value">@Hours(_figures.AverageHoursAcceptedToErp)</div>
+            <div class="tile-label">Avg. accepted → in ERP</div>
         </div>
     </section>
 

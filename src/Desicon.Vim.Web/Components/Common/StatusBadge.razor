@@ -6,19 +6,22 @@
     private string Css => Status switch
     {
         CaseStatus.Received or CaseStatus.Registered => "new",
-        CaseStatus.UnderVerification => "review",
+        CaseStatus.UnderVerification or CaseStatus.ExceptionReview => "review",
         CaseStatus.ReturnedToVendor => "returned",
         CaseStatus.Verified or CaseStatus.WithAccountsPayable => "ap",
-        CaseStatus.EnteredInErp or CaseStatus.Paid or CaseStatus.Closed => "done",
+        CaseStatus.Accepted or CaseStatus.EnteredInErp or CaseStatus.Paid or CaseStatus.Closed => "done",
         CaseStatus.Cancelled => "cancelled",
         _ => "new",
     };
 
     private string Label => Status switch
     {
+        CaseStatus.Received => "Checking",
         CaseStatus.ReturnedToVendor => "Returned to vendor",
-        CaseStatus.UnderVerification => "Under verification",
-        CaseStatus.WithAccountsPayable => "With AP",
+        CaseStatus.UnderVerification => "Under verification (legacy)",
+        CaseStatus.ExceptionReview => "With Finance Manager",
+        CaseStatus.WithAccountsPayable => "With Accounts",
+        CaseStatus.Accepted => "Accepted",
         CaseStatus.EnteredInErp => "Entered in ERP",
         _ => Status.ToString(),
     };

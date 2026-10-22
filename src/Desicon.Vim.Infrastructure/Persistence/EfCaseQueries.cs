@@ -18,7 +18,7 @@ public sealed class EfCaseQueries(VimDbContext db, IClock clock) : ICaseQueries
     /// <summary>Dashboard averages and return reasons look at this many days of history.</summary>
     public const int DashboardWindowDays = 90;
 
-    private const string VerifyAction = nameof(CaseAction.Verify);
+    private const string AcceptAction = nameof(CaseAction.Accept);
     private const string RecordErpEntryAction = nameof(CaseAction.RecordErpEntry);
     private const string ReturnToVendorAction = nameof(CaseAction.ReturnToVendor);
 
@@ -132,21 +132,21 @@ public sealed class EfCaseQueries(VimDbContext db, IClock clock) : ICaseQueries
 
         var receivedLast30 = await cases.CountAsync(c => c.ReceivedAtUtc >= last30, ct).ConfigureAwait(false);
 
-        // Receipt → verification: each Verify event against the case's receipt time.
-        var minutesToVerified = await (
+        // Submission → acceptance (official submission): each Accept event against the case's receipt time.
+        var minutesToAccepted = await (
                 from e in events
-                where e.Action == VerifyAction && e.OccurredAtUtc >= since
+                where e.Action == AcceptAction && e.OccurredAtUtc >= since
                 join c in cases on e.CaseId equals c.Id
                 select (double?)EF.Functions.DateDiffMinute(c.ReceivedAtUtc, e.OccurredAtUtc))
             .AverageAsync(ct)
             .ConfigureAwait(false);
 
-        // Verification → ERP entry: each RecordErpEntry event against the latest Verify before it.
-        var minutesVerifiedToErp = await (
+        // Acceptance → ERP entry: each RecordErpEntry event against the latest Accept before it.
+        var minutesAcceptedToErp = await (
                 from e in events
                 where e.Action == RecordErpEntryAction && e.OccurredAtUtc >= since
                 let verifiedAt = events
-                    .Where(v => v.CaseId == e.CaseId && v.Action == VerifyAction && v.Sequence < e.Sequence)
+                    .Where(v => v.CaseId == e.CaseId && v.Action == AcceptAction && v.Sequence < e.Sequence)
                     .Max(v => (DateTimeOffset?)v.OccurredAtUtc)
                 where verifiedAt != null
                 select (double?)EF.Functions.DateDiffMinute(verifiedAt, e.OccurredAtUtc))
@@ -166,8 +166,8 @@ public sealed class EfCaseQueries(VimDbContext db, IClock clock) : ICaseQueries
             byStatus,
             overdue,
             receivedLast30,
-            minutesToVerified / 60d,
-            minutesVerifiedToErp / 60d,
+            minutesToAccepted / 60d,
+            minutesAcceptedToErp / 60d,
             reasonRows.Select(r => new ReasonCount(r.Reason, r.Count)).ToList());
     }
 }

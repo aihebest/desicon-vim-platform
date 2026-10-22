@@ -7,61 +7,60 @@ internal static class TestData
 {
     public static readonly DateTimeOffset Monday10am = new(2026, 10, 19, 9, 0, 0, TimeSpan.Zero); // 10:00 WAT
 
-    public static readonly Actor DocumentController = Actor.Create("dc-1", "Ada (DC)", VimRole.DocumentController);
-    public static readonly Actor OtherDocumentController = Actor.Create("dc-2", "Bola (DC delegate)", VimRole.DocumentController);
-    public static readonly Actor Reviewer = Actor.Create("ro-1", "Chidi (GMC Cost Controller)", VimRole.Reviewer);
-    public static readonly Actor DelegateReviewer = Actor.Create("ro-2", "Dayo (delegate)", VimRole.Reviewer);
-    public static readonly Actor OtherReviewer = Actor.Create("ro-9", "Uche (other RO)", VimRole.Reviewer);
+    public static readonly Actor DocumentController = Actor.Create("dc-1", "Ada (legacy DC)", VimRole.DocumentController);
+    public static readonly Actor Vendor = Actor.Create("vendor-v0001", "ABC Ltd (portal)", VimRole.Vendor);
     public static readonly Actor AccountsPayable = Actor.Create("ap-1", "Efe (AP)", VimRole.AccountsPayable);
+    public static readonly Actor OtherAccountsPayable = Actor.Create("ap-2", "Gbenga (AP)", VimRole.AccountsPayable);
     public static readonly Actor FinanceManager = Actor.Create("fm-1", "Femi (FM)", VimRole.FinanceManager);
 
     public static ActionContext At(Actor actor, DateTimeOffset? when = null) => ActionContext.For(actor, when ?? Monday10am);
 
-    public static InvoiceDetails Details(SupplyType supply = SupplyType.Materials) => new(
-        VendorName: "ABC Ltd",
+    public static StageDeadline Due(string holder = "Accounts Payable") => new(holder, Monday10am.AddHours(9), Monday10am.AddHours(4.5));
+
+    public static InvoiceSubmission Submission(SupplyType supply = SupplyType.Materials, string invoiceNo = "INV-001", decimal amount = 1_250_000m) => new(
         VendorNo: "V0001",
-        InvoiceNumber: "INV-001",
+        VendorName: "ABC Ltd",
+        VendorEmail: "accounts@abc.example",
+        InvoiceNumber: invoiceNo,
         InvoiceDate: new DateOnly(2026, 10, 14),
-        Amount: 1_250_000m,
+        Amount: amount,
         Currency: "NGN",
         OrderNumber: "PO123",
         SupplyType: supply,
-        CategoryCode: "GMC");
+        DeliveredOn: new DateOnly(2026, 10, 13));
 
-    public static IReadOnlyCollection<ChecklistResponse> AllYes(ChecklistStage stage, SupplyType supply = SupplyType.Materials) =>
-        DesiconInvoiceChecklist.Version1.ItemsFor(stage, supply)
+    public static IReadOnlyCollection<ChecklistResponse> AllYes(SupplyType supply = SupplyType.Materials) =>
+        DesiconInvoiceChecklist.Current.ItemsFor(ChecklistStage.AccountsCheck, supply)
             .Select(i => new ChecklistResponse(i.Code, ChecklistAnswer.Yes))
             .ToList();
 
-    public static ReviewerAssignment Assignment(DateTimeOffset? now = null) => new(
-        Reviewer.Id, Reviewer.DisplayName, [DelegateReviewer.Id], (now ?? Monday10am).AddHours(48), (now ?? Monday10am).AddHours(24));
-
-    public static InvoiceCase NewCase()
+    /// <summary>A portal submission with every required slot filled and scanned clean.</summary>
+    public static InvoiceCase Submitted(SupplyType supply = SupplyType.Materials, Actor? by = null, SubmissionChannel channel = SubmissionChannel.Portal, bool scanClean = true)
     {
-        var c = InvoiceCase.Receive("VIM-2026-000001", SubmissionChannel.Email, "accounts@abc.example", "ABC Ltd", "ABC LTD_INV001_PO123_14Oct26", At(Actor.System));
-        var doc = c.AttachDocument(DocumentKind.SubmissionPackage, "invoice.pdf", "application/pdf", 1024, "ABCDEF", "VIM-2026-000001/round-1/x.pdf", At(Actor.System));
-        c.RecordScanResult(doc.Id, ScanStatus.Clean, At(Actor.System));
+        var c = InvoiceCase.Submit("VIM-2026-000001", channel, Submission(supply), At(by ?? Vendor));
+        foreach (var kind in RequiredDocuments.For(supply))
+        {
+            var doc = c.AttachDocument(kind, $"{kind}.pdf", "application/pdf", 1024, "ABCDEF" + kind, $"VIM-2026-000001/round-1/{kind}.pdf", At(by ?? Vendor));
+            if (scanClean)
+            {
+                c.RecordScanResult(doc.Id, ScanStatus.Clean, At(Actor.System));
+            }
+        }
+
         return c;
     }
 
-    public static InvoiceCase Registered()
+    public static InvoiceCase WithAccounts(Actor? submittedBy = null, SubmissionChannel channel = SubmissionChannel.Portal)
     {
-        var c = NewCase();
-        c.Register(Details(), AllYes(ChecklistStage.Intake), DesiconInvoiceChecklist.Version1, At(DocumentController));
+        var c = Submitted(by: submittedBy, channel: channel);
+        c.PassToAccounts(Due(), At(Actor.System));
         return c;
     }
 
-    public static InvoiceCase UnderVerification()
+    public static InvoiceCase Accepted()
     {
-        var c = Registered();
-        c.SendForVerification(Assignment(), At(DocumentController));
-        return c;
-    }
-
-    public static InvoiceCase Verified()
-    {
-        var c = UnderVerification();
-        c.Verify(AllYes(ChecklistStage.Verification), DesiconInvoiceChecklist.Version1, At(Reviewer));
+        var c = WithAccounts();
+        c.Accept(AllYes(), DesiconInvoiceChecklist.Current, At(AccountsPayable));
         return c;
     }
 }

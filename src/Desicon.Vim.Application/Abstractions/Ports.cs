@@ -34,6 +34,16 @@ public interface ICaseRepository
     /// <summary>Open cases with at least one document still waiting for its malware scan result.</summary>
     Task<IReadOnlyList<InvoiceCase>> GetWithPendingScansAsync(CancellationToken ct);
 
+    /// <summary>Portal / assisted submissions waiting for their automatic checks (status Received).</summary>
+    Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Other cases already claiming value on this PO / SO that Business Central does not
+    /// yet show as invoiced (submitted, with the FM or Accounts, or accepted).
+    /// </summary>
+    Task<IReadOnlyList<(string Reference, decimal Amount)>> GetOpenClaimsOnOrderAsync(string vendorNo, string orderNumber, Guid excludeCaseId, CancellationToken ct);
+
+    /// <summary>Cases with Accounts or the Finance Manager whose half-way reminder is due.</summary>
     Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct);
 
     Task<IReadOnlyList<InvoiceCase>> GetOverdueNotEscalatedAsync(DateTimeOffset nowUtc, CancellationToken ct);
@@ -54,6 +64,9 @@ public interface ICaseQueries
 public interface IUnitOfWork
 {
     Task SaveChangesAsync(CancellationToken ct);
+
+    /// <summary>Forgets unsaved changes (after a failure), so a later save in the same scope does not resend them.</summary>
+    void DiscardChanges();
 }
 
 public interface IReferenceGenerator
@@ -104,13 +117,16 @@ public interface IInvoiceExtractor
 
 public sealed record ErpVendor(string VendorNo, string Name, bool Blocked, IReadOnlyList<string> Emails, IReadOnlyList<string> BankAccountNumbers);
 
+/// <param name="RemainingAmount">Ordered but not yet invoiced, including VAT.</param>
+/// <param name="ReceivedNotInvoicedAmount">Received (GRV / TRV posted) but not yet invoiced, including VAT: what a full-value invoice must equal.</param>
 public sealed record ErpOrderCheck(
     bool OrderFound,
     bool BelongsToVendor,
     bool IsOpen,
     bool HasPostedReceipt,
     decimal? RemainingAmount,
-    string? Currency);
+    string? Currency,
+    decimal? ReceivedNotInvoicedAmount = null);
 
 public sealed record ErpPaymentStatus(bool Paid, string? PaymentReference, DateOnly? PaidOn);
 

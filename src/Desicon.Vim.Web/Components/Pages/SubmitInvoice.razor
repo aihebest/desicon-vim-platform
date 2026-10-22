@@ -1,0 +1,223 @@
+@page "/submit"
+@attribute [Authorize(Policy = Policies.AccountsPayable)]
+@inherits VimComponentBase
+@inject NavigationManager Nav
+@using Desicon.Vim.Application.Submission
+
+<PageTitle>@(_resubmitting is null ? "Submit an invoice" : $"Resubmit {_resubmitting.Reference}") · Desicon VIM</PageTitle>
+
+@if (_resubmitting is null)
+{
+    <h1>Submit an invoice for a vendor</h1>
+    <p class="muted">Assisted submission, for vendors who cannot use the vendor portal. It is the same form and the same checks the vendor sees. Delivery must already be confirmed by the department (GRV / TRV posted in Business Central). You cannot accept an invoice you submitted.</p>
+}
+else
+{
+    <h1>Resubmit @_resubmitting.Reference</h1>
+    <p class="muted">Correct the details and attach the corrected documents. Slots left empty keep the documents already on file.</p>
+    @if (_resubmitting.LastReason is not null) { <div class="alert alert-error">Returned because: @_resubmitting.LastReason</div> }
+}
+
+@if (_problems.Count > 0)
+{
+    <div class="alert alert-error" role="alert">
+        <strong>This invoice cannot be submitted yet:</strong>
+        <ul>@foreach (var p in _problems) { <li>@p</li> }</ul>
+    </div>
+}
+@if (Error is not null) { <div class="alert alert-error" role="alert">@Error</div> }
+
+<section class="panel">
+    <h2>Invoice details</h2>
+    <div class="form-grid">
+        <label>BC vendor no.<input @bind="_f.VendorNo" @bind:after="LookupVendorAsync" disabled="@(_resubmitting is not null)" /></label>
+        <label>Vendor name<input @bind="_f.VendorName" /></label>
+        <label>Vendor email (for the vendor's notices)<input type="email" @bind="_f.VendorEmail" placeholder="Taken from the BC vendor card if empty" /></label>
+        <label>Invoice no.<input @bind="_f.InvoiceNumber" /></label>
+        <label>Invoice date<input type="date" @bind="_f.InvoiceDate" /></label>
+        <label>Delivery / completion date<input type="date" @bind="_f.DeliveredOn" /></label>
+        <label>PO / SO no.<input @bind="_f.OrderNumber" @bind:after="LookupOrderAsync" /></label>
+        <label>Supply type
+            <select @bind="_f.SupplyType">
+                <option value="@SupplyType.Unknown">Select…</option>
+                <option value="@SupplyType.Materials">Materials delivered (PO)</option>
+                <option value="@SupplyType.Services">Service rendered (SO)</option>
+            </select>
+        </label>
+        <label>Currency
+            <select @bind="_f.Currency"><option>NGN</option><option>USD</option><option>EUR</option><option>GBP</option></select>
+        </label>
+        <label>Invoice amount (VAT included)<input type="number" step="0.01" @bind="_f.Amount" /></label>
+    </div>
+    @if (_orderHint is not null) { <p class="muted">@_orderHint</p> }
+</section>
+
+@if (_f.SupplyType != SupplyType.Unknown)
+{
+    <section class="panel">
+        <h2>Documents (PDF only, max @MaxMb MB each)</h2>
+        @foreach (var kind in RequiredDocuments.For(_f.SupplyType).Concat(RequiredDocuments.Optional(_f.SupplyType)))
+        {
+            var required = RequiredDocuments.For(_f.SupplyType).Contains(kind) && _resubmitting is null;
+            <div class="slot-row">
+                <label class="block">@RequiredDocuments.Label(kind) @(required ? "*" : "(optional)")
+                    <InputFile accept="application/pdf" OnChange="e => OnFile(kind, e)" />
+                </label>
+                @if (_files.TryGetValue(kind, out var file)) { <span class="muted">@file.Name · @(file.Size / 1024) KB</span> }
+            </div>
+        }
+    </section>
+
+    <button class="primary" disabled="@Busy" @onclick="SubmitAsync">@(_resubmitting is null ? "Submit invoice" : "Resubmit")</button>
+}
+else
+{
+    <p class="muted">Choose the supply type to see the required documents.</p>
+}
+
+@code {
+    private const int MaxMb = 25;
+
+    [SupplyParameterFromQuery(Name = "resubmit")] public Guid? ResubmitId { get; set; }
+
+    private readonly Form _f = new();
+    private readonly Dictionary<DocumentKind, IBrowserFile> _files = [];
+    private List<string> _problems = [];
+    private string? _orderHint;
+    private InvoiceCase? _resubmitting;
+
+    private sealed class Form
+    {
+        public string? VendorNo { get; set; }
+        public string? VendorName { get; set; }
+        public string? VendorEmail { get; set; }
+        public string? InvoiceNumber { get; set; }
+        public DateOnly? InvoiceDate { get; set; }
+        public DateOnly? DeliveredOn { get; set; }
+        public string? OrderNumber { get; set; }
+        public SupplyType SupplyType { get; set; }
+        public string Currency { get; set; } = "NGN";
+        public decimal? Amount { get; set; }
+    }
+
+    protected override async Task LoadAsync()
+    {
+        if (ResubmitId is not { } id || _resubmitting is not null)
+        {
+            return;
+        }
+
+        await InScope(async sp =>
+        {
+            _resubmitting = await sp.GetRequiredService<ICaseRepository>().GetAsync(id, default);
+        });
+        if (_resubmitting is { } c)
+        {
+            _f.VendorNo = c.VendorNo;
+            _f.VendorName = c.VendorName;
+            _f.VendorEmail = c.SenderEmail;
+            _f.InvoiceNumber = c.InvoiceNumber;
+            _f.InvoiceDate = c.InvoiceDate;
+            _f.DeliveredOn = c.DeliveredOn;
+            _f.OrderNumber = c.OrderNumber;
+            _f.SupplyType = c.SupplyType;
+            _f.Currency = c.Currency ?? "NGN";
+            _f.Amount = c.Amount;
+        }
+    }
+
+    private void OnFile(DocumentKind kind, InputFileChangeEventArgs e) => _files[kind] = e.File;
+
+    private async Task LookupVendorAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_f.VendorNo))
+        {
+            return;
+        }
+
+        try
+        {
+            var vendor = await InScope(sp => sp.GetRequiredService<IErpGateway>().GetVendorAsync(_f.VendorNo.Trim().ToUpperInvariant(), default));
+            if (vendor is not null)
+            {
+                _f.VendorName ??= vendor.Name;
+                _f.VendorEmail ??= vendor.Emails.Count > 0 ? vendor.Emails[0] : null;
+            }
+        }
+#pragma warning disable CA1031 // A lookup is a convenience only.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Logger.LogWarning(ex, "Vendor lookup failed.");
+        }
+    }
+
+    /// <summary>Shows what Business Central says can be invoiced, so the amount is right first time.</summary>
+    private async Task LookupOrderAsync()
+    {
+        _orderHint = null;
+        if (string.IsNullOrWhiteSpace(_f.VendorNo) || string.IsNullOrWhiteSpace(_f.OrderNumber))
+        {
+            return;
+        }
+
+        try
+        {
+            var order = await InScope(sp => sp.GetRequiredService<IErpGateway>().CheckOrderAsync(_f.VendorNo.Trim().ToUpperInvariant(), _f.OrderNumber.Trim().ToUpperInvariant(), default));
+            var received = order.ReceivedNotInvoicedAmount ?? 0m;
+            _orderHint = !order.OrderFound ? "Business Central: order not found (or already fully invoiced)."
+                : !order.BelongsToVendor ? "Business Central: this order is issued to a different vendor."
+                : received > 0m ? string.Create(CultureInfo.InvariantCulture, $"Business Central: received and not yet invoiced on this order: {order.Currency} {received:N2} (VAT included). A full-value invoice must equal this.")
+                : "Business Central: no delivery confirmed yet (no GRV / TRV posted).";
+        }
+#pragma warning disable CA1031 // A lookup is a convenience only.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Logger.LogWarning(ex, "Order lookup failed.");
+        }
+    }
+
+    private InvoiceSubmission ToSubmission() => new(
+        _f.VendorNo ?? string.Empty, _f.VendorName ?? string.Empty, _f.VendorEmail,
+        _f.InvoiceNumber ?? string.Empty, _f.InvoiceDate ?? default, _f.Amount ?? 0, _f.Currency,
+        _f.OrderNumber ?? string.Empty, _f.SupplyType, _f.DeliveredOn ?? default);
+
+    private IReadOnlyList<SubmittedFile> ToFiles() => _files
+        .Where(kv => RequiredDocuments.For(_f.SupplyType).Concat(RequiredDocuments.Optional(_f.SupplyType)).Contains(kv.Key))
+        .Select(kv => new SubmittedFile(kv.Key, kv.Value.Name, kv.Value.ContentType, kv.Value.Size,
+            _ => Task.FromResult(kv.Value.OpenReadStream(MaxMb * 1024L * 1024L))))
+        .ToList();
+
+    private async Task SubmitAsync()
+    {
+        _problems = [];
+        var submission = ToSubmission();
+        var files = ToFiles();
+        _problems = (await InScope(sp => sp.GetRequiredService<SubmissionService>()
+            .PrecheckAsync(submission, files, _resubmitting?.Id, _resubmitting?.Reference, default))).ToList();
+        if (_problems.Count > 0)
+        {
+            return;
+        }
+
+        Guid? id = _resubmitting?.Id;
+        await RunActionAsync(async sp =>
+        {
+            var service = sp.GetRequiredService<SubmissionService>();
+            if (_resubmitting is null)
+            {
+                id = (await service.SubmitAsync(Me!, SubmissionChannel.Assisted, submission, files, default)).Id;
+            }
+            else
+            {
+                await service.ResubmitAsync(_resubmitting.Id, Me!, submission, files, default);
+            }
+        }, "Submitted.");
+
+        if (Error is null && id is { } caseId)
+        {
+            Nav.NavigateTo($"cases/{caseId}");
+        }
+    }
+}
