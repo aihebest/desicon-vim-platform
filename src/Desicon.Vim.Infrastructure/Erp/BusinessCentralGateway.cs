@@ -17,7 +17,7 @@ namespace Desicon.Vim.Infrastructure.Erp;
 /// The platform never creates, posts or pays anything in Business Central.
 /// Assumptions are listed in docs/operations/business-central.md:
 /// <list type="bullet">
-/// <item>vendors: <c>number</c>, <c>displayName</c>, <c>email</c>, <c>blocked</c> (" ", "Payment", "All").</item>
+/// <item>vendors: <c>number</c>, <c>displayName</c>, <c>email</c>, <c>blocked</c> ("_x0020_" = not blocked, "Payment", "All").</item>
 /// <item>purchaseOrders (+ $expand=purchaseOrderLines): an order exists only until it is fully invoiced;
 /// API status "Open" = Released in the BC client; a posted receipt is detected from line <c>receivedQuantity</c>.</item>
 /// <item>purchaseInvoices: posted invoices carry status "Open" or "Paid"; the API exposes no payment date or
@@ -119,10 +119,19 @@ public sealed class BusinessCentralGateway(
 
     private static string Filter(string expression) => Uri.EscapeDataString(expression);
 
+    /// <summary>
+    /// BC's vendor "blocked" option is " " (not blocked), "Payment" or "All". The API
+    /// serialises the blank option as "_x0020_" (an encoded space), so only the two
+    /// real values count as blocked.
+    /// </summary>
+    internal static bool IsBlocked(string? blocked) =>
+        string.Equals(blocked?.Trim(), "Payment", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(blocked?.Trim(), "All", StringComparison.OrdinalIgnoreCase);
+
     private static ErpVendor ToErpVendor(BcVendor v) => new(
         v.Number ?? string.Empty,
         v.DisplayName ?? string.Empty,
-        Blocked: !string.IsNullOrWhiteSpace(v.Blocked),
+        Blocked: IsBlocked(v.Blocked),
         Emails: string.IsNullOrWhiteSpace(v.Email) ? [] : [v.Email.Trim()],
         // Not available from the standard API v2.0; requires a custom API page (Phase 2).
         BankAccountNumbers: []);
