@@ -19,8 +19,14 @@ Status: accepted (stakeholder meeting with the DMD, Finance, Procurement and Pro
 - Targets (DMD, 19 Oct 2026): 3 working days from delivery to acceptance. VIM enforces 1 working day each for Accounts and for the Finance Manager (`AccountsCheckWorkingDays`, `ExceptionReviewWorkingDays`), with a reminder half-way and escalation (Accounts → Finance Manager; Finance Manager → `ManagementEscalationEmail`).
 - Segregation of duties: whoever keyed in an assisted submission, or cleared a blocking flag, cannot accept the case.
 
+- Full value is measured against what is received and not yet invoiced in Business Central **minus** other open VIM cases on the same PO / SO, so two invoices cannot claim the same delivery before BC is posted.
+- With Business Central switched off the checks fail closed: the case goes to the Finance Manager.
+- A resubmission clears the flags the automatic checks raised on the earlier round; the checks then run again.
+
 ## Still open
 
 - Per-category exceptions to full-value invoicing (milestones on PMC / GMC service orders).
 - Measuring step 1 → 2 (delivery to GRV) needs the vendor to record delivery on the portal; planned with the portal.
+- Portal: the vendor's sign-in must be tied to its BC vendor number before go-live, so a vendor can only submit or resubmit for itself.
+- Legacy cases: v1 statuses (Registered, UnderVerification, Verified) can only be cancelled; email-channel cases are not picked up by the automatic checks.
 - Bank details: Business Central API v2.0 does not expose vendor bank accounts; Accounts compares by eye (checklist `ACC_BANK`) until a custom API page exists.

@@ -46,6 +46,8 @@ public sealed class SubmissionProcessor(
             catch (Exception ex) when (ex is not OperationCanceledException)
 #pragma warning restore CA1031
             {
+                // Forget this case's half-made changes so the next case's save does not carry them.
+                unitOfWork.DiscardChanges();
                 logger.LogError(ex, "Automatic checks failed for {Reference}; will retry.", c.Reference);
                 waiting++;
             }
@@ -67,11 +69,19 @@ public sealed class SubmissionProcessor(
         var ctx = ActionContext.For(Actor.System, now);
         var o = options.Value;
 
-        var infected = c.CurrentDocuments.Where(d => d.ScanStatus is ScanStatus.Malicious or ScanStatus.ScanFailed).ToList();
+        var infected = c.CurrentDocuments.Where(d => d.ScanStatus == ScanStatus.Malicious).ToList();
         if (infected.Count > 0)
         {
             return await ReturnAsync(c,
-                $"These files could not pass the virus scan: {string.Join(", ", infected.Select(d => d.FileName))}. Please scan the documents again to clean PDFs and resubmit.",
+                $"These files failed the virus scan: {string.Join(", ", infected.Select(d => d.FileName))}. Please scan the documents again to clean PDFs and resubmit.",
+                ctx, ct).ConfigureAwait(false);
+        }
+
+        var unscannable = c.CurrentDocuments.Where(d => d.ScanStatus == ScanStatus.ScanFailed).ToList();
+        if (unscannable.Count > 0)
+        {
+            return await ReturnAsync(c,
+                $"These files could not be read by our security scan (for example password-protected or damaged): {string.Join(", ", unscannable.Select(d => d.FileName))}. Please save them again as ordinary PDFs and resubmit.",
                 ctx, ct).ConfigureAwait(false);
         }
 
@@ -86,9 +96,7 @@ public sealed class SubmissionProcessor(
         {
             outcome = await checks.EvaluateAsync(c.Id, c.Reference, ToSubmission(c), ct).ConfigureAwait(false);
         }
-#pragma warning disable CA1031 // Business Central unreachable: wait, then hand to the Finance Manager.
-        catch (Exception ex) when (ex is not OperationCanceledException)
-#pragma warning restore CA1031
+        catch (ErpUnavailableException ex)
         {
             if (now - c.LastChangedAtUtc < TimeSpan.FromHours(o.ErpUnavailableEscalationHours))
             {

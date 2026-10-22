@@ -52,6 +52,13 @@ internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboun
     public Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.Received && c.Channel is SubmissionChannel.Portal or SubmissionChannel.Assisted).ToList());
 
+    public Task<IReadOnlyList<(string Reference, decimal Amount)>> GetOpenClaimsOnOrderAsync(string vendorNo, string orderNumber, Guid excludeCaseId, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<(string Reference, decimal Amount)>>(Cases
+            .Where(c => c.Id != excludeCaseId && c.VendorNo == vendorNo && c.OrderNumber == orderNumber && c.Amount is not null
+                && c.Status is CaseStatus.Received or CaseStatus.ExceptionReview or CaseStatus.WithAccountsPayable or CaseStatus.Accepted)
+            .Select(c => (c.Reference, c.Amount!.Value))
+            .ToList());
+
     private static bool WithHolder(InvoiceCase c) => c.Status is CaseStatus.WithAccountsPayable or CaseStatus.ExceptionReview;
 
     public Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
@@ -95,6 +102,10 @@ internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboun
         }
 
         return Task.CompletedTask;
+    }
+
+    public void DiscardChanges()
+    {
     }
 
     // IDocumentStore

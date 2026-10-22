@@ -74,6 +74,24 @@ public sealed class EfCaseRepository(VimDbContext db) : ICaseRepository
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<(string Reference, decimal Amount)>> GetOpenClaimsOnOrderAsync(string vendorNo, string orderNumber, Guid excludeCaseId, CancellationToken ct)
+    {
+        var rows = await db.Cases
+            .AsNoTracking()
+            .Where(c => c.Id != excludeCaseId
+                && c.VendorNo == vendorNo
+                && c.OrderNumber == orderNumber
+                && c.Amount != null
+                && (c.Status == CaseStatus.Received
+                    || c.Status == CaseStatus.ExceptionReview
+                    || c.Status == CaseStatus.WithAccountsPayable
+                    || c.Status == CaseStatus.Accepted))
+            .Select(c => new { c.Reference, Amount = c.Amount!.Value })
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+        return rows.Select(r => (r.Reference, r.Amount)).ToList();
+    }
+
     public async Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct) =>
         await WithChildren()
             .Where(c => (c.Status == CaseStatus.WithAccountsPayable || c.Status == CaseStatus.ExceptionReview)

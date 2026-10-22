@@ -394,6 +394,14 @@ public sealed class InvoiceCase
         SubmissionRound++;
         ApplySubmission(corrected);
         RegisteredById = ctx.Actor.Id;
+
+        // Flags the automatic checks raised were about the earlier round; the checks raise them again if still true.
+        foreach (var flag in _flags.Where(f => f.IsOpen && f.RaisedById == Actor.System.Id).ToList())
+        {
+            flag.Resolve($"Superseded by resubmission round {SubmissionRound}; the automatic checks run again.", ctx);
+            Audit("FlagResolved", Status, Status, ctx, "Superseded by resubmission", new { flagId = flag.Id, flag.Code });
+        }
+
         ExtractedJson = null;
         AcceptedAtUtc = null;
         ApProcessedById = null;
@@ -584,11 +592,14 @@ public sealed class InvoiceCase
     public IReadOnlyList<string> BlockingFlagResolverIds =>
         _flags.Where(f => f.Blocking && f.ResolvedById is not null).Select(f => f.ResolvedById!).Distinct().ToList();
 
-    /// <summary>Accounts must be someone other than the submitter (assisted entry) and anyone who cleared a blocking flag.</summary>
+    /// <summary>Accounts must be someone other than anyone who submitted (any round of an assisted entry) and anyone who cleared a blocking flag.</summary>
     public bool IsIndependentOfEarlierSteps(Actor actor)
     {
         ArgumentNullException.ThrowIfNull(actor);
-        return actor.Id != RegisteredById && actor.Id != VerifiedById && !BlockingFlagResolverIds.Contains(actor.Id);
+        return actor.Id != RegisteredById
+            && actor.Id != VerifiedById
+            && !BlockingFlagResolverIds.Contains(actor.Id)
+            && !_documents.Any(d => d.AddedById == actor.Id); // anyone who keyed in any round
     }
 
     private void EnsureIndependentOfEarlierSteps(Actor actor, string what)

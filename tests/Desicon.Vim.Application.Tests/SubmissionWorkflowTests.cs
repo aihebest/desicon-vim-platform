@@ -34,8 +34,8 @@ public class SubmissionWorkflowTests
 
     private CaseWorkflowService Workflow() => new(_store, _store, _store, _clock, Opts.Default());
 
-    private static InvoiceSubmission Submission(string invoiceNo = "INV-001", decimal amount = 1_000_000m, string? email = null) =>
-        new("V0001", "ABC Ltd", email, invoiceNo, new DateOnly(2026, 10, 14), amount, "NGN", "PO123", SupplyType.Materials, new DateOnly(2026, 10, 13));
+    private static InvoiceSubmission Submission(string invoiceNo = "INV-001", decimal amount = 1_000_000m, string? email = null, string order = "PO123") =>
+        new("V0001", "ABC Ltd", email, invoiceNo, new DateOnly(2026, 10, 14), amount, "NGN", order, SupplyType.Materials, new DateOnly(2026, 10, 13));
 
     private static SubmittedFile Pdf(DocumentKind kind) =>
         new(kind, $"{kind}.pdf", "application/pdf", 21, _ => Task.FromResult<Stream>(new MemoryStream(Encoding.ASCII.GetBytes("%PDF-1.7 test content"))));
@@ -187,8 +187,8 @@ public class SubmissionWorkflowTests
         var first = await SubmitAndScanAsync();
         await Processor().RunAsync(default);
 
-        // Renumbered resend: same vendor, same amount, close date.
-        var second = await SubmitAndScanAsync(Submission(invoiceNo: "INV-001A"));
+        // Renumbered resend: same vendor, same amount, close date (on another PO, so the PO value check passes).
+        var second = await SubmitAndScanAsync(Submission(invoiceNo: "INV-001A", order: "PO124"));
         await Processor().RunAsync(default);
 
         Assert.Equal(CaseStatus.ExceptionReview, second.Status);
@@ -267,7 +267,7 @@ public class SubmissionWorkflowTests
         var withAccounts = await SubmitAndScanAsync();
         await Processor().RunAsync(default);
 
-        var flagged = await SubmitAndScanAsync(Submission(invoiceNo: "INV-001A"));
+        var flagged = await SubmitAndScanAsync(Submission(invoiceNo: "INV-001A", order: "PO124"));
         await Processor().RunAsync(default);
         Assert.Equal(CaseStatus.ExceptionReview, flagged.Status);
 
@@ -284,5 +284,62 @@ public class SubmissionWorkflowTests
         Assert.Equal(2, escalations.Escalations);
         Assert.Contains(_store.Sent, n => n.Template == "Escalation" && n.ToAddress == "finance.manager@desicon.example" && n.CaseId == withAccounts.Id);
         Assert.Contains(_store.Sent, n => n.Template == "Escalation" && n.ToAddress == "dmd.office@desicon.example" && n.CaseId == flagged.Id);
+    }
+
+    [Fact]
+    public async Task A_second_invoice_against_value_already_being_invoiced_is_refused()
+    {
+        var first = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+
+        var problems = await Submissions().PrecheckAsync(Submission(invoiceNo: "INV-002"), AllSlots(), null, null, default);
+
+        Assert.Contains(problems, p => p.Contains("already being invoiced", StringComparison.Ordinal) && p.Contains(first.Reference, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task A_resubmission_clears_flags_the_checks_raised_on_the_earlier_round()
+    {
+        var c = await SubmitAndScanAsync();
+        _erp.Down = true;
+        _clock.UtcNow = Now.AddHours(5);
+        await Processor().RunAsync(default);
+        Assert.Equal(CaseStatus.ExceptionReview, c.Status);
+        await Workflow().ReturnToVendorAsync(c.Id, "Please confirm the PO number with Procurement.", Fm, default);
+
+        _erp.Down = false;
+        await Submissions().ResubmitAsync(c.Id, Ap, Submission(), [Pdf(DocumentKind.Invoice)], default);
+        ScanAllClean(c);
+        await Processor().RunAsync(default);
+
+        Assert.DoesNotContain(c.Flags, f => f.IsOpen);
+        Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
+    }
+
+    [Fact]
+    public async Task With_business_central_switched_off_the_case_goes_to_the_finance_manager()
+    {
+        _erp.IsEnabled = false;
+        var c = await SubmitAndScanAsync(Submission(email: "ap@abc.example"));
+
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.ExceptionReview, c.Status);
+        Assert.Contains(c.Flags, f => f.Code == FlagCodes.ErpUnavailable && f.Blocking);
+    }
+
+    [Fact]
+    public async Task Anyone_who_keyed_in_any_round_cannot_accept()
+    {
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+        await Workflow().ReturnToVendorAsync(c.Id, "GRV is not signed by the receiver.", Ap2, default);
+        await Submissions().ResubmitAsync(c.Id, Ap2, Submission(), [Pdf(DocumentKind.GoodsReceivedVoucher)], default);
+        ScanAllClean(c);
+        await Processor().RunAsync(default);
+
+        // Ap keyed round 1, Ap2 keyed round 2: neither may accept.
+        await Assert.ThrowsAsync<DomainRuleException>(() => Workflow().AcceptAsync(c.Id, AllYes(), Ap, default));
+        await Assert.ThrowsAsync<DomainRuleException>(() => Workflow().AcceptAsync(c.Id, AllYes(), Ap2, default));
     }
 }

@@ -6,6 +6,25 @@ using Microsoft.Extensions.Options;
 
 namespace Desicon.Vim.Application.Submission;
 
+/// <summary>Business Central could not be reached (or refused the request); the checks must wait.</summary>
+public sealed class ErpUnavailableException : Exception
+{
+    public ErpUnavailableException()
+        : base("Business Central is unavailable.")
+    {
+    }
+
+    public ErpUnavailableException(string message)
+        : base(message)
+    {
+    }
+
+    public ErpUnavailableException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}
+
 /// <summary>A flag an automatic check wants on the case.</summary>
 public sealed record CheckFlag(string Code, string Description, bool Blocking);
 
@@ -41,14 +60,28 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
 
         if (erp.IsEnabled)
         {
-            await CheckErpAsync(s, rejections, ct).ConfigureAwait(false);
+            try
+            {
+                await CheckErpAsync(caseId, s, rejections, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not ErpUnavailableException)
+            {
+                throw new ErpUnavailableException("Business Central could not be read: " + ex.Message, ex);
+            }
+        }
+        else
+        {
+            // Fail closed: without Business Central nothing has checked the PO, receipt or amount.
+            flags.Add(new CheckFlag(FlagCodes.ErpUnavailable,
+                "Business Central checks are switched off, so the PO / SO, posted receipt and full-value checks have not run. Check them in Business Central before releasing.",
+                Blocking: true));
         }
 
         await CheckDuplicatesAsync(caseId, reference, s, rejections, flags, ct).ConfigureAwait(false);
         return new CheckOutcome(rejections, flags);
     }
 
-    private async Task CheckErpAsync(InvoiceSubmission s, List<string> rejections, CancellationToken ct)
+    private async Task CheckErpAsync(Guid caseId, InvoiceSubmission s, List<string> rejections, CancellationToken ct)
     {
         var vendorNo = s.VendorNo.Trim().ToUpperInvariant();
         var orderNo = s.OrderNumber.Trim().ToUpperInvariant();
@@ -98,12 +131,22 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
             return;
         }
 
+        // Other VIM cases on this order that BC does not show as invoiced yet claim part of the received value.
+        var claims = await cases.GetOpenClaimsOnOrderAsync(vendorNo, orderNo, caseId, ct).ConfigureAwait(false);
+        var available = received.Value - claims.Sum(c => c.Amount);
         var tolerance = options.Value.FullValueTolerance;
-        if (Math.Abs(s.Amount - received.Value) > tolerance)
+        if (claims.Count > 0 && available <= tolerance)
+        {
+            rejections.Add($"The value received on {orderNo} is already being invoiced under {string.Join(", ", claims.Select(c => c.Reference))}. " +
+                           "Wait for the department to confirm the next delivery before invoicing again.");
+            return;
+        }
+
+        if (Math.Abs(s.Amount - available) > tolerance)
         {
             rejections.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"The invoice amount ({currency} {s.Amount:N2}) does not equal the value received and not yet invoiced on {orderNo} ({currency} {received.Value:N2}, VAT included). Desicon accepts invoices for the full received value only."));
+                $"The invoice amount ({currency} {s.Amount:N2}) does not equal the value received and not yet invoiced on {orderNo} ({currency} {available:N2}, VAT included). Desicon accepts invoices for the full received value only."));
         }
     }
 

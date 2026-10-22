@@ -37,6 +37,12 @@ public interface ICaseRepository
     /// <summary>Portal / assisted submissions waiting for their automatic checks (status Received).</summary>
     Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct);
 
+    /// <summary>
+    /// Other cases already claiming value on this PO / SO that Business Central does not
+    /// yet show as invoiced (submitted, with the FM or Accounts, or accepted).
+    /// </summary>
+    Task<IReadOnlyList<(string Reference, decimal Amount)>> GetOpenClaimsOnOrderAsync(string vendorNo, string orderNumber, Guid excludeCaseId, CancellationToken ct);
+
     /// <summary>Cases with Accounts or the Finance Manager whose half-way reminder is due.</summary>
     Task<IReadOnlyList<InvoiceCase>> GetDueForReminderAsync(DateTimeOffset nowUtc, CancellationToken ct);
 
@@ -58,6 +64,9 @@ public interface ICaseQueries
 public interface IUnitOfWork
 {
     Task SaveChangesAsync(CancellationToken ct);
+
+    /// <summary>Forgets unsaved changes (after a failure), so a later save in the same scope does not resend them.</summary>
+    void DiscardChanges();
 }
 
 public interface IReferenceGenerator

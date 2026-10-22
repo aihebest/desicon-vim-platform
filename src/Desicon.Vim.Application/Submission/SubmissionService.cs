@@ -54,9 +54,7 @@ public sealed class SubmissionService(
                 var outcome = await checks.EvaluateAsync(existingCaseId ?? Guid.Empty, existingReference ?? string.Empty, submission, ct).ConfigureAwait(false);
                 problems.AddRange(outcome.Rejections);
             }
-#pragma warning disable CA1031 // BC down must not stop a submission; the processor re-checks.
-            catch (Exception ex) when (ex is not OperationCanceledException)
-#pragma warning restore CA1031
+            catch (ErpUnavailableException ex)
             {
                 logger.LogWarning(ex, "Business Central pre-check unavailable; the checks will run after the scan.");
             }

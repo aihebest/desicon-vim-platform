@@ -72,7 +72,7 @@ public static class WorkflowRules
         // Corrected documents start the checks again.
         T(CaseAction.Resubmit, [CaseStatus.ReturnedToVendor], CaseStatus.Received, [VimRole.Vendor, VimRole.AccountsPayable, VimRole.System]),
 
-        // After acceptance (legacy Verified/WithAccountsPayable cases created by workflow v1 end here too).
+        // After acceptance. Legacy v1 cases (Registered, UnderVerification, Verified) can only be cancelled.
         T(CaseAction.RecordErpEntry, [CaseStatus.Accepted], CaseStatus.EnteredInErp, [VimRole.AccountsPayable]),
         T(CaseAction.RecordPayment, [CaseStatus.EnteredInErp], CaseStatus.Paid, [VimRole.System, VimRole.AccountsPayable]),
         T(CaseAction.Close, [CaseStatus.Paid], CaseStatus.Closed, [VimRole.System, VimRole.AccountsPayable]),

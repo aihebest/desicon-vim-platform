@@ -91,6 +91,10 @@ internal sealed class InvoiceCaseConfiguration : IEntityTypeConfiguration<Invoic
         builder.Ignore(x => x.NewAuditEvents);
         builder.Ignore(x => x.HasOpenBlockingFlags);
         builder.Ignore(x => x.DelegateIdList);
+        builder.Ignore(x => x.CurrentDocuments);
+        builder.Ignore(x => x.MissingRequiredDocuments);
+        builder.Ignore(x => x.AllCurrentDocumentsScanned);
+        builder.Ignore(x => x.BlockingFlagResolverIds);
     }
 }
 
