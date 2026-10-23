@@ -261,6 +261,12 @@ variable "log_retention_days" {
   default     = 30
 }
 
+variable "alert_emails" {
+  description = "Comma-separated email addresses for operational alerts (GitHub variable ALERT_EMAILS). Empty: no alerts."
+  type        = string
+  default     = ""
+}
+
 variable "log_daily_quota_gb" {
   description = "Daily Log Analytics ingestion cap in GB (-1 = unlimited)."
   type        = number

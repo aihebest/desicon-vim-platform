@@ -41,6 +41,17 @@ variable "app_insights_local_auth_enabled" {
   default     = true
 }
 
+variable "alert_emails" {
+  description = "Email addresses that receive operational alerts (for example failed vendor notifications). Empty list: no alerts are created."
+  type        = list(string)
+  default     = []
+}
+
+variable "alert_name_prefix" {
+  description = "Prefix for alert and action group names, e.g. \"vim-dev-weu\"."
+  type        = string
+}
+
 variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)
