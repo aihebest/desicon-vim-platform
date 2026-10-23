@@ -93,6 +93,9 @@ module "monitoring" {
   retention_in_days = var.log_retention_days
   daily_quota_gb    = var.log_daily_quota_gb
 
+  alert_name_prefix = local.base
+  alert_emails      = [for e in split(",", var.alert_emails) : trimspace(e) if trimspace(e) != ""]
+
   tags = local.tags
 }
 

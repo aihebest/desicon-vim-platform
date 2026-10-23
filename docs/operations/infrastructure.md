@@ -324,6 +324,16 @@ StorageMalwareScanningResults | take 50
 
 ---
 
+### Operational alerts
+
+Set the GitHub variable **ALERT_EMAILS** on `<env>-plan` and `<env>` (comma-separated, e.g. `ict@example.com,finance.manager@example.com`) and deploy. Terraform then creates an action group and the alert **"VIM: notification emails failing"**: it fires when a vendor or staff email fails twice (the dispatcher logs `VIM_EMAIL_FAILURE`), checked every 15 minutes. Usual causes: the sending mailbox (`Mailbox:UserId`) was deleted or renamed, or its Exchange "Application Mail.Send" assignment was removed — re-run `infra/scripts/grant-mailbox-access.ps1`. After fixing, retry the stuck emails:
+
+```sql
+UPDATE vim.OutboxMessages SET Attempts = 0, NextAttemptAtUtc = SYSUTCDATETIME() WHERE SentAtUtc IS NULL;
+```
+
+Cost: about USD 1.50 per month per environment. Leave ALERT_EMAILS empty to create no alerts.
+
 ## 7. Cost notes
 
 No prices are quoted here — they vary by region, currency and agreement and change over time. Use the **Azure Pricing Calculator** with your region and the SKUs below, and set a **budget alert** on each resource group (*Cost Management → Budgets*).

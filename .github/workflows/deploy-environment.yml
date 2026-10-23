@@ -16,6 +16,7 @@
 #   ENTRA_WORKBENCH_CLIENT_ID
 #   BC_TENANT_ID (desiconerp.com), BC_ENVIRONMENT
 #   [BC_CLIENT_ID]  connector client id; empty = BC checks off  [BC_COMPANY_ID]  optional
+#   [ALERT_EMAILS]  comma-separated addresses for operational alerts; empty = none
 #   MAILBOX_USER_ID
 #   [KEYVAULT_SECRETS_OFFICER_OBJECT_IDS]  HCL list, e.g. ["<group-object-id>"]
 #   AZURE_MIGRATION_CLIENT_ID   ("<env>" only) the migration identity
@@ -83,6 +84,7 @@ jobs:
       TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
+      TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v4
@@ -208,6 +210,7 @@ jobs:
       TF_VAR_business_central_company_id: ${{ vars.BC_COMPANY_ID }}
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
+      TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v4

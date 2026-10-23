@@ -30,6 +30,9 @@ public sealed class OutboxDispatcher(
     public const int BatchSize = 50;
     public const int MaxAttempts = 8;
 
+    /// <summary>From this failed attempt on, each failure is logged for the operational alert.</summary>
+    public const int AlertAfterAttempts = 2;
+
     private static readonly string[] UserSelect = ["mail", "userPrincipalName"];
 
     public async Task<OutboxDispatchResult> DispatchAsync(CancellationToken ct)
@@ -84,6 +87,20 @@ public sealed class OutboxDispatcher(
                     message.Id,
                     message.Template,
                     message.Attempts);
+
+                // Second failure or giving up: raise the "notification emails failing" alert
+                // (Azure Monitor matches this exact prefix; logged without the exception so it lands in traces).
+                if (message.Attempts >= AlertAfterAttempts)
+                {
+                    logger.LogError(
+                        "VIM_EMAIL_FAILURE {Template} for case {CaseId} to {ToAddress} failed {Attempt} time(s){GaveUp}: {Error}",
+                        message.Template,
+                        message.CaseId,
+                        message.ToAddress,
+                        message.Attempts,
+                        message.Attempts >= MaxAttempts ? " and will not be retried" : string.Empty,
+                        message.LastError);
+                }
             }
 
             // Save after each message so a crash mid-batch does not resend what already went out.
