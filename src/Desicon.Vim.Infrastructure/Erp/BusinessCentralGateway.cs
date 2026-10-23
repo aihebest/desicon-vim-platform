@@ -170,17 +170,43 @@ public sealed class BusinessCentralGateway(
         using var response = await http.SendAsync(request, ct).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
         {
+            // Log the path only (the query can hold vendor emails and numbers) and BC's error code,
+            // not its message or body, which can echo the data that was asked for.
             var body = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
             logger.LogError(
-                "Business Central request {Url} failed with {StatusCode}: {Body}",
-                relativeUrl,
+                "Business Central request {Path} failed with {StatusCode} ({ErrorCode}).",
+                PathOnly(relativeUrl),
                 (int)response.StatusCode,
-                body.Length > 1000 ? body[..1000] : body);
+                ErrorCode(body));
             response.EnsureSuccessStatusCode();
         }
 
         var page = await response.Content.ReadFromJsonAsync<ODataList<T>>(Json, ct).ConfigureAwait(false);
         return page?.Value ?? [];
+    }
+
+    private static string PathOnly(string relativeUrl)
+    {
+        var q = relativeUrl.IndexOf('?', StringComparison.Ordinal);
+        return q < 0 ? relativeUrl : relativeUrl[..q];
+    }
+
+    /// <summary>The OData error code ("BadRequest_NotFound", "Authorization_..."), or "unknown".</summary>
+    private static string ErrorCode(string body)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.TryGetProperty("error", out var error)
+                && error.TryGetProperty("code", out var code)
+                && code.ValueKind == JsonValueKind.String
+                ? code.GetString() ?? "unknown"
+                : "unknown";
+        }
+        catch (JsonException)
+        {
+            return "unknown";
+        }
     }
 
     private sealed class ODataList<T>
