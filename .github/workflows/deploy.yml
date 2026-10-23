@@ -65,9 +65,9 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "10.0.x"
 
@@ -96,14 +96,14 @@ jobs:
             --output out/efbundle/efbundle \
             --force
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: web
           path: out/web
           retention-days: 7
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: functions
           path: out/functions
@@ -111,7 +111,7 @@ jobs:
           if-no-files-found: error
           include-hidden-files: true # functions publish output contains .azurefunctions/
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: efbundle
           path: out/efbundle
