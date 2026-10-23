@@ -45,6 +45,9 @@ updates:
         patterns: ["Azure.*"]
       test:
         patterns: ["xunit*", "Microsoft.NET.Test.Sdk", "coverlet*"]
+      # Graph pins its Kiota version; bumping one alone fails restore (NU1605).
+      microsoft-graph:
+        patterns: ["Microsoft.Graph*", "Microsoft.Kiota*"]
     ignore:
       # Major versions are deliberate migrations (new .NET, new Functions
       # host contract, new telemetry SDK), not Monday-morning merges.
@@ -55,6 +58,11 @@ updates:
       - dependency-name: "Microsoft.Azure.Functions.Worker*"
         update-types: ["version-update:semver-major"]
       - dependency-name: "Microsoft.ApplicationInsights*"
+        update-types: ["version-update:semver-major"]
+      # Graph SDK 6 / Kiota 2 change the mail-reading and sending code; a planned upgrade.
+      - dependency-name: "Microsoft.Graph*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Kiota*"
         update-types: ["version-update:semver-major"]
 
   # One entry per Terraform root and module directory: Dependabot does not
