@@ -87,7 +87,7 @@ jobs:
       TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # KEYVAULT_SECRETS_OFFICER_OBJECT_IDS may be entered as ["id1","id2"],
       # [id1,id2] (Windows PowerShell 5.1 strips the inner quotes) or id1,id2.
@@ -116,7 +116,7 @@ jobs:
           fi
           exit $missing
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
@@ -171,7 +171,7 @@ jobs:
       # The saved plan is applied verbatim by the deploy job, so what the
       # reviewer approved is exactly what runs. Short retention: a plan file
       # can contain sensitive values (e.g. the App Insights connection string).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tfplan-${{ inputs.environment }}
           path: ${{ env.TF_DIR }}/tfplan
@@ -213,7 +213,7 @@ jobs:
       TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # KEYVAULT_SECRETS_OFFICER_OBJECT_IDS may be entered as ["id1","id2"],
       # [id1,id2] (Windows PowerShell 5.1 strips the inner quotes) or id1,id2.
@@ -228,7 +228,7 @@ jobs:
           echo "TF_VAR_keyvault_secrets_officer_object_ids=[$list]" >> "$GITHUB_ENV"
           echo "Key Vault secrets officers: [$list]"
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
           terraform_wrapper: false
@@ -242,7 +242,7 @@ jobs:
           -backend-config="key=${{ inputs.environment }}.terraform.tfstate"
           -backend-config="subscription_id=${{ vars.TF_STATE_SUBSCRIPTION_ID || vars.AZURE_SUBSCRIPTION_ID }}"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: tfplan-${{ inputs.environment }}
           path: ${{ env.TF_DIR }}
@@ -272,7 +272,7 @@ jobs:
       # Sign in as the DEPLOY identity first: it may manage the SQL firewall.
       - name: Azure login (deploy identity)
         if: ${{ !inputs.infra_only }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -299,13 +299,13 @@ jobs:
       # change the schema; this one cannot read secrets or touch resources.
       - name: Azure login (migration identity)
         if: ${{ !inputs.infra_only }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_MIGRATION_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           allow-no-subscriptions: true
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ !inputs.infra_only }}
         with:
           name: efbundle
@@ -323,7 +323,7 @@ jobs:
       # Back to the deploy identity for app deployment and firewall cleanup.
       - name: Azure login (deploy identity, again)
         if: ${{ always() && !inputs.infra_only }}
-        uses: azure/login@v2
+        uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -340,7 +340,7 @@ jobs:
       # ---- Application deployment ------------------------------------------------
       # Both actions use the Azure CLI sign-in (Entra token), so publishing
       # profiles / basic auth stay disabled on the apps.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ !inputs.infra_only }}
         with:
           name: web
@@ -353,7 +353,7 @@ jobs:
           app-name: ${{ steps.tfout.outputs.web_app_name }}
           package: web
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: ${{ !inputs.infra_only }}
         with:
           name: functions
