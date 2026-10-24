@@ -3,6 +3,7 @@ using Desicon.Vim.Application.Queries;
 using Desicon.Vim.Domain.Audit;
 using Desicon.Vim.Domain.Cases;
 using Desicon.Vim.Domain.Integrity;
+using Desicon.Vim.Domain.VendorAccess;
 using Desicon.Vim.Domain.Workflow;
 
 namespace Desicon.Vim.Application.Abstractions;
@@ -142,6 +143,32 @@ public interface IErpGateway
     Task<ErpOrderCheck> CheckOrderAsync(string vendorNo, string orderNumber, CancellationToken ct);
 
     Task<ErpPaymentStatus?> GetPaymentStatusAsync(string erpDocumentNumber, CancellationToken ct);
+}
+
+/// <summary>Vendor portal invitations, portal users and their access log.</summary>
+public interface IVendorAccessRepository
+{
+    Task<VendorInvitation?> GetInvitationByTokenHashAsync(string tokenHash, CancellationToken ct);
+
+    Task<VendorInvitation?> GetInvitationAsync(Guid id, CancellationToken ct);
+
+    /// <summary>Invitations not yet accepted, withdrawn or expired.</summary>
+    Task<IReadOnlyList<VendorInvitation>> ListPendingInvitationsAsync(DateTimeOffset nowUtc, string? vendorNo, CancellationToken ct);
+
+    void AddInvitation(VendorInvitation invitation);
+
+    Task<VendorUser?> GetUserByExternalIdAsync(string externalUserId, CancellationToken ct);
+
+    Task<VendorUser?> GetUserAsync(Guid id, CancellationToken ct);
+
+    /// <summary>All portal users (active and removed), for Procurement and the access review.</summary>
+    Task<IReadOnlyList<VendorUser>> ListUsersAsync(string? vendorNo, CancellationToken ct);
+
+    void AddUser(VendorUser user);
+
+    void AddEvent(VendorAccessEvent accessEvent);
+
+    Task<IReadOnlyList<VendorAccessEvent>> ListEventsAsync(string? vendorNo, int take, CancellationToken ct);
 }
 
 public interface INotificationOutbox

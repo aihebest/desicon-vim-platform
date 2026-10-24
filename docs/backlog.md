@@ -9,7 +9,7 @@
 - [ ] SHA-pin all GitHub Actions (`npx ratchet pin .github/workflows/*.yml`)
 - [ ] Create the Entra app registration and app roles; assign test users per role
 - [ ] Grant the Functions identity access to the invoice mailbox only (`infra/scripts/grant-mailbox-access.ps1`)
-- [ ] Load real reviewer object ids for the five SOP categories (Invoice routing screen)
+- [x] ~~Load real reviewer object ids for the five SOP categories~~ — superseded: workflow v2 (ADR 0002) has no departmental review routing; the screen was removed
 - [ ] Enable Defender for Storage malware scanning on the documents account and confirm the scan-result tag name (`BlobScanStatusReader`)
 - [ ] One-time: give the deploy identity rights to create the custom "VIM Blob Index Tag Reader" role (see infrastructure.md)
 - [ ] Anchor each case's audit head hash outside the database (e.g. immutable blob) so a full-chain rewrite by a DBA is detectable

@@ -8,7 +8,9 @@ internal static class TestData
     public static readonly DateTimeOffset Monday10am = new(2026, 10, 19, 9, 0, 0, TimeSpan.Zero); // 10:00 WAT
 
     public static readonly Actor DocumentController = Actor.Create("dc-1", "Ada (legacy DC)", VimRole.DocumentController);
-    public static readonly Actor Vendor = Actor.Create("vendor-v0001", "ABC Ltd (portal)", VimRole.Vendor);
+    public static readonly Actor Vendor = Actor.Create("vendor-v0001", "ABC Ltd (portal)", VimRole.Vendor) with { VendorNo = "V0001" };
+    public static readonly Actor OtherVendor = Actor.Create("vendor-v0002", "XYZ Ltd (portal)", VimRole.Vendor) with { VendorNo = "V0002" };
+    public static readonly Actor Procurement = Actor.Create("pr-1", "Halima (Procurement)", VimRole.Procurement);
     public static readonly Actor AccountsPayable = Actor.Create("ap-1", "Efe (AP)", VimRole.AccountsPayable);
     public static readonly Actor OtherAccountsPayable = Actor.Create("ap-2", "Gbenga (AP)", VimRole.AccountsPayable);
     public static readonly Actor FinanceManager = Actor.Create("fm-1", "Femi (FM)", VimRole.FinanceManager);

@@ -135,3 +135,6 @@ fieldset.checklist legend { font-weight: 600; padding: 0 6px; }
 .slot-row label.block { margin: 0; }
 a.button { display: inline-block; padding: 8px 14px; border-radius: 6px; border: 1px solid #0b4f8a; color: #0b4f8a; text-decoration: none; }
 a.button:hover { background: #0b4f8a; color: #fff; }
+
+/* Vendor access */
+label.radio { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-weight: normal; }

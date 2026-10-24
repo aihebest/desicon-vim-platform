@@ -82,6 +82,9 @@ public enum VimRole
 
     /// <summary>A vendor signed in to the portal (External ID). Not an Entra app role in the staff tenant.</summary>
     Vendor = 6,
+
+    /// <summary>Invites and removes vendor portal users (owns vendor onboarding).</summary>
+    Procurement = 7,
     System = 99,
 }
 

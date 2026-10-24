@@ -8,6 +8,9 @@ namespace Desicon.Vim.Infrastructure.Persistence.Configurations;
 internal static class Len
 {
     public const int EntraId = 100;
+
+    /// <summary>External ID "tenantId:objectId" (two GUIDs and a colon).</summary>
+    public const int ExternalUserId = 100;
     public const int PersonName = 200;
     public const int Email = 320;
     public const int EnumName = 32;

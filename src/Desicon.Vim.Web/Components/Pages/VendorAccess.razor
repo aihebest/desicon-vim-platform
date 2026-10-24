@@ -1,0 +1,170 @@
+@page "/vendors"
+@attribute [Authorize(Policy = Policies.VendorAccessReview)]
+@inherits VimComponentBase
+@using Desicon.Vim.Application.VendorAccess
+@using Desicon.Vim.Domain.VendorAccess
+
+<PageTitle>Vendor portal access · Desicon VIM</PageTitle>
+<h1>Vendor portal access</h1>
+<p class="muted">Procurement invites vendor contacts after confirming them, and removes leavers. The Finance Manager reviews this list each quarter. Accounts Payable cannot invite vendors.</p>
+
+@if (Error is not null) { <div class="alert alert-error" role="alert">@Error</div> }
+@if (Success is not null) { <div class="alert alert-ok" role="status">@Success</div> }
+
+@if (CanManage)
+{
+    <section class="panel">
+        <h2>Invite a vendor contact</h2>
+        <div class="form-grid">
+            <label>BC vendor no.<input id="inv-vendor" @bind="_vendorNo" @bind:after="LookupAsync" /></label>
+            <label>Contact email<input id="inv-email" type="email" @bind="_email" /></label>
+        </div>
+        @if (_vendor is not null)
+        {
+            <p class="muted">
+                Business Central: <strong>@_vendor.Name</strong> (@_vendor.VendorNo)@(_vendor.Blocked ? " — BLOCKED, cannot be invited" : "").
+                Email on the vendor card: @(_vendor.Emails.Count > 0 ? string.Join(", ", _vendor.Emails) : "none")
+            </p>
+        }
+        <fieldset class="checklist">
+            <legend>How was the contact confirmed?</legend>
+            <label class="radio"><input type="radio" name="conf" checked="@(_confirmation == ContactConfirmation.VendorCardEmail)" @onchange="() => _confirmation = ContactConfirmation.VendorCardEmail" /> The email is the one on the BC vendor card</label>
+            <label class="radio"><input type="radio" name="conf" checked="@(_confirmation == ContactConfirmation.PhoneCallBack)" @onchange="() => _confirmation = ContactConfirmation.PhoneCallBack" /> I phoned the vendor on a number already on file and confirmed this contact</label>
+            @if (_confirmation == ContactConfirmation.PhoneCallBack)
+            {
+                <textarea id="inv-note" rows="2" placeholder="Who you spoke to, the number on file you called, and when" @bind="_note"></textarea>
+            }
+        </fieldset>
+        <button class="primary" disabled="@Busy" @onclick="InviteAsync">Send invitation</button>
+        <p class="muted">The link works once, only for that email address, and expires after a few days. Never invite someone from an email request alone.</p>
+    </section>
+}
+
+@if (_overview is not null)
+{
+    <section class="panel">
+        <h2>Pending invitations <span class="count">@_overview.PendingInvitations.Count</span></h2>
+        @if (_overview.PendingInvitations.Count == 0) { <p class="muted">No pending invitations.</p> }
+        else
+        {
+            <table class="grid">
+                <thead><tr><th>Vendor</th><th>Email</th><th>Confirmed by</th><th>Invited</th><th>Expires</th><th></th></tr></thead>
+                <tbody>
+                    @foreach (var i in _overview.PendingInvitations)
+                    {
+                        <tr>
+                            <td>@i.VendorName <span class="muted">(@i.VendorNo)</span></td>
+                            <td>@i.Email</td>
+                            <td>@(i.Confirmation == ContactConfirmation.VendorCardEmail ? "BC vendor card" : "Call-back") <span class="muted">@i.ConfirmationNote</span></td>
+                            <td>@Format.Wat(i.CreatedAtUtc) <span class="muted">by @i.CreatedByName</span></td>
+                            <td>@Format.Wat(i.ExpiresAtUtc)</td>
+                            <td>@if (CanManage || IsFinanceManager) { <button disabled="@Busy" @onclick="() => WithdrawAsync(i.Id)">Withdraw</button> }</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Portal users <span class="count">@_overview.Users.Count(u => !u.IsDisabled)</span></h2>
+        @if (_overview.Users.Count == 0) { <p class="muted">Nobody has joined the portal yet.</p> }
+        else
+        {
+            <table class="grid">
+                <thead><tr><th>Vendor</th><th>Email</th><th>Status</th><th>Joined</th><th>Last sign-in</th><th>Remove</th></tr></thead>
+                <tbody>
+                    @foreach (var u in _overview.Users)
+                    {
+                        <tr>
+                            <td>@u.VendorName <span class="muted">(@u.VendorNo)</span></td>
+                            <td>@u.Email</td>
+                            <td>
+                                @if (u.IsDisabled) { <span class="badge badge-cancelled" title="@u.DisabledReason">Removed</span> }
+                                else if (u.IsDormant(_overview.NowUtc, _overview.DormantDays)) { <span class="badge badge-returned">Dormant</span> }
+                                else { <span class="badge badge-done">Active</span> }
+                            </td>
+                            <td>@Format.Wat(u.CreatedAtUtc)</td>
+                            <td>@Format.Wat(u.LastSignInAtUtc)</td>
+                            <td>
+                                @if (!u.IsDisabled && (CanManage || IsFinanceManager))
+                                {
+                                    <div class="inline-form">
+                                        <input placeholder="Reason" value="@_reasons.GetValueOrDefault(u.Id)" @onchange="e => _reasons[u.Id] = e.Value?.ToString() ?? string.Empty" />
+                                        <button class="danger" disabled="@Busy" @onclick="() => DisableAsync(u.Id)">Remove</button>
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="panel">
+        <h2>Recent activity</h2>
+        <table class="grid compact">
+            <thead><tr><th>When (WAT)</th><th>What</th><th>Vendor</th><th>Email</th><th>By</th><th>Details</th></tr></thead>
+            <tbody>
+                @foreach (var e in _overview.RecentEvents)
+                {
+                    <tr><td>@Format.Wat(e.OccurredAtUtc)</td><td>@e.Action</td><td>@e.VendorNo</td><td>@e.Email</td><td>@e.ActorName</td><td>@e.Details</td></tr>
+                }
+            </tbody>
+        </table>
+    </section>
+}
+
+@code {
+    private VendorAccessOverview? _overview;
+    private string? _vendorNo;
+    private string? _email;
+    private string? _note;
+    private ContactConfirmation _confirmation = ContactConfirmation.VendorCardEmail;
+    private ErpVendor? _vendor;
+    private readonly Dictionary<Guid, string> _reasons = [];
+
+    private bool CanManage => Me?.HasRole(VimRole.Procurement) == true && Me?.HasRole(VimRole.AccountsPayable) != true;
+
+    private bool IsFinanceManager => Me?.HasRole(VimRole.FinanceManager) == true;
+
+    protected override async Task LoadAsync() =>
+        _overview = await InScope(sp => sp.GetRequiredService<VendorAccessService>().GetOverviewAsync(null, default));
+
+    private async Task LookupAsync()
+    {
+        _vendor = null;
+        if (string.IsNullOrWhiteSpace(_vendorNo))
+        {
+            return;
+        }
+
+        try
+        {
+            _vendor = await InScope(sp => sp.GetRequiredService<IErpGateway>().GetVendorAsync(_vendorNo.Trim().ToUpperInvariant(), default));
+            if (_vendor is { Emails.Count: > 0 } && string.IsNullOrWhiteSpace(_email))
+            {
+                _email = _vendor.Emails[0];
+            }
+        }
+#pragma warning disable CA1031 // A lookup is a convenience only; the invite itself re-checks.
+        catch (Exception ex)
+#pragma warning restore CA1031
+        {
+            Logger.LogWarning(ex, "Vendor lookup failed.");
+        }
+    }
+
+    private Task InviteAsync() => RunActionAsync(
+        sp => sp.GetRequiredService<VendorAccessService>().InviteAsync(Me!, _vendorNo ?? string.Empty, _email ?? string.Empty, _confirmation, _note, default),
+        "Invitation sent.");
+
+    private Task WithdrawAsync(Guid id) => RunActionAsync(
+        sp => sp.GetRequiredService<VendorAccessService>().WithdrawInvitationAsync(id, Me!, default),
+        "Invitation withdrawn.");
+
+    private Task DisableAsync(Guid id) => RunActionAsync(
+        sp => sp.GetRequiredService<VendorAccessService>().DisableUserAsync(id, _reasons.GetValueOrDefault(id) ?? string.Empty, Me!, default),
+        "Portal user removed.");
+}

@@ -188,7 +188,9 @@ public sealed class InvoiceCase
 
         var allowed = channel switch
         {
-            SubmissionChannel.Portal => ctx.Actor.HasRole(VimRole.Vendor),
+            // A portal login acts only for the vendor its invitation bound it to.
+            SubmissionChannel.Portal => ctx.Actor.HasRole(VimRole.Vendor)
+                && string.Equals(ctx.Actor.VendorNo, submission.VendorNo?.Trim(), StringComparison.OrdinalIgnoreCase),
             SubmissionChannel.Assisted => ctx.Actor.HasRole(VimRole.AccountsPayable),
             _ => false,
         };
@@ -389,6 +391,11 @@ public sealed class InvoiceCase
         if (!string.Equals(corrected.VendorNo.Trim(), VendorNo, StringComparison.OrdinalIgnoreCase))
         {
             throw new DomainRuleException(RuleCodes.InvalidValue, "A resubmission must be for the same vendor.");
+        }
+
+        if (ctx.Actor.HasRole(VimRole.Vendor) && !string.Equals(ctx.Actor.VendorNo, VendorNo, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new DomainRuleException(RuleCodes.RoleNotPermitted, "A vendor can only resubmit its own invoices.");
         }
 
         SubmissionRound++;

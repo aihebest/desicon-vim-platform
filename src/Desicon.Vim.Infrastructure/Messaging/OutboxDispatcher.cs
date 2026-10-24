@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Desicon.Vim.Application.Abstractions;
 using Desicon.Vim.Application.Notifications;
 using Desicon.Vim.Infrastructure.Persistence;
@@ -20,7 +21,7 @@ public sealed record OutboxDispatchResult(int Sent, int Failed);
 /// Runs from a timer function, which the Functions host runs as a singleton,
 /// so two dispatchers never pick up the same message.
 /// </summary>
-public sealed class OutboxDispatcher(
+public sealed partial class OutboxDispatcher(
     VimDbContext db,
     GraphServiceClient graph,
     IClock clock,
@@ -73,6 +74,11 @@ public sealed class OutboxDispatcher(
 
                 await SendAsync(senderMailbox, to, message, ct).ConfigureAwait(false);
                 message.SentAtUtc = clock.UtcNow;
+                if (CarriesSecretLink(message))
+                {
+                    // The one-time link is no longer needed once delivered; never keep a usable copy.
+                    message.HtmlBody = InviteLink().Replace(message.HtmlBody, "/invite/[sent]");
+                }
                 message.LastError = null;
                 sent++;
             }
@@ -153,9 +159,16 @@ public sealed class OutboxDispatcher(
                     new Recipient { EmailAddress = new EmailAddress { Address = to } },
                 ],
             },
-            SaveToSentItems = true,
+            // Invitation emails carry a one-time sign-up link: no copy in the shared mailbox.
+            SaveToSentItems = !CarriesSecretLink(message),
         };
 
         await graph.Users[senderMailbox].SendMail.PostAsync(body, cancellationToken: ct).ConfigureAwait(false);
     }
+
+    private static bool CarriesSecretLink(OutboxMessage message) =>
+        string.Equals(message.Template, nameof(NotificationTemplates.PortalInvitation), StringComparison.Ordinal);
+
+    [GeneratedRegex("/invite/[A-Za-z0-9_-]+")]
+    private static partial Regex InviteLink();
 }
