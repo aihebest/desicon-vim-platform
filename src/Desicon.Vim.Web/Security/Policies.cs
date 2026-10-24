@@ -18,6 +18,10 @@ public static class Policies
     public const string AccountsPayable = nameof(AccountsPayable);
     public const string FinanceManager = nameof(FinanceManager);
     public const string Administration = nameof(Administration);
+    public const string Procurement = nameof(Procurement);
+
+    /// <summary>See vendor portal users (Procurement manages them; the Finance Manager reviews them).</summary>
+    public const string VendorAccessReview = nameof(VendorAccessReview);
 
     public const string RolePrefix = "Vim.";
 
@@ -26,13 +30,15 @@ public static class Policies
     public static AuthorizationOptions AddVimPolicies(this AuthorizationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var all = Enum.GetValues<VimRole>().Where(r => r != VimRole.System).Select(RoleName).ToArray();
+        var all = Enum.GetValues<VimRole>().Where(r => r is not VimRole.System and not VimRole.Vendor).Select(RoleName).ToArray();
         options.AddPolicy(AnyVimUser, p => p.RequireAuthenticatedUser().RequireRole(all));
         options.AddPolicy(DocumentController, p => p.RequireRole(RoleName(VimRole.DocumentController)));
         options.AddPolicy(Reviewer, p => p.RequireRole(RoleName(VimRole.Reviewer)));
         options.AddPolicy(AccountsPayable, p => p.RequireRole(RoleName(VimRole.AccountsPayable)));
         options.AddPolicy(FinanceManager, p => p.RequireRole(RoleName(VimRole.FinanceManager)));
         options.AddPolicy(Administration, p => p.RequireRole(RoleName(VimRole.FinanceManager), RoleName(VimRole.PlatformAdmin)));
+        options.AddPolicy(Procurement, p => p.RequireRole(RoleName(VimRole.Procurement)));
+        options.AddPolicy(VendorAccessReview, p => p.RequireRole(RoleName(VimRole.Procurement), RoleName(VimRole.FinanceManager)));
 
         // Deny by default: every page needs a Vim role unless it opts out.
         options.FallbackPolicy = options.GetPolicy(AnyVimUser);
@@ -70,7 +76,7 @@ public sealed class CurrentActor(AuthenticationStateProvider authState) : ICurre
         var name = user.FindFirstValue("name") ?? user.Identity.Name ?? id;
 
         var roles = new HashSet<VimRole>();
-        foreach (var role in Enum.GetValues<VimRole>().Where(r => r != VimRole.System))
+        foreach (var role in Enum.GetValues<VimRole>().Where(r => r is not VimRole.System and not VimRole.Vendor))
         {
             if (user.IsInRole(Policies.RoleName(role)))
             {

@@ -5,8 +5,8 @@
     <AuthorizeView Policy="@Policies.AccountsPayable">
         <NavLink href="submit">Submit for a vendor</NavLink>
     </AuthorizeView>
-    <AuthorizeView Policy="@Policies.Administration">
-        <div class="nav-section">Administration</div>
-        <NavLink href="admin/routes">Invoice routing</NavLink>
+    <AuthorizeView Policy="@Policies.VendorAccessReview">
+        <div class="nav-section">Vendors</div>
+        <NavLink href="vendors">Portal access</NavLink>
     </AuthorizeView>
 </nav>

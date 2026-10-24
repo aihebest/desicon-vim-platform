@@ -19,6 +19,7 @@
       Vim.FinanceManager      Finance oversight, exceptions, approvals
       Vim.PlatformAdmin       Configuration (routes, users, reference data)
       Vim.Auditor             Read-only access to cases and audit history
+      Vim.Procurement         Invites and removes vendor portal users
 
     The role IDs below are FIXED GUIDs. Never change them: Entra links every
     existing assignment to the ID, so a new ID would orphan every assignment.
@@ -90,7 +91,9 @@ $roles = @(
     @{ id = 'fecec827-dc01-4c19-b112-0b62d350ff14'; value = 'Vim.PlatformAdmin'; displayName = 'Platform Administrator'
        description = 'Configures routes, reference data and platform settings.' },
     @{ id = '626a6f2c-f6c2-422c-a081-363714aa6cc5'; value = 'Vim.Auditor'; displayName = 'Auditor'
-       description = 'Read-only access to cases and the audit trail.' }
+       description = 'Read-only access to cases and the audit trail.' },
+    @{ id = 'e46c143b-b89d-4392-b10f-143c5e458dab'; value = 'Vim.Procurement'; displayName = 'Procurement'
+       description = 'Invites and removes vendor portal users after confirming the contact.' }
 ) | ForEach-Object {
     [ordered]@{
         allowedMemberTypes = @('User')   # people and groups, not applications

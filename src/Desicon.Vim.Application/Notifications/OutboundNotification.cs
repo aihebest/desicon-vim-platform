@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using Desicon.Vim.Domain.Cases;
+using Desicon.Vim.Domain.VendorAccess;
 
 namespace Desicon.Vim.Application.Notifications;
 
@@ -83,6 +84,14 @@ public static class NotificationTemplates
         $"Overdue: {c.Reference} with {c.AssignedReviewerName}",
         $"<p>Invoice <strong>{E(c.Reference)}</strong> from {E(c.VendorName)} passed its deadline ({Due(c)}) while with {E(c.AssignedReviewerName)}.</p>" +
         Summary(c) + $"<p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+
+    public static OutboundNotification PortalInvitation(VendorInvitation invitation, string link) => new(
+        Guid.Empty, nameof(PortalInvitation), NotificationChannel.Email, invitation.Email,
+        $"Invitation: Desicon vendor portal for {invitation.VendorName}",
+        $"<p>Dear {E(invitation.VendorName)} team,</p><p>Desicon Engineering invites you to submit and track your invoices on the Desicon vendor portal, for vendor account <strong>{E(invitation.VendorNo)}</strong>.</p>" +
+        $"<p><a href=\"{E(link)}\">Accept the invitation</a></p>" +
+        $"<p>Sign in with <strong>this email address ({E(invitation.Email)})</strong>; you will receive a one-time code to confirm it. The link works once and expires on {Wat(invitation.ExpiresAtUtc)}.</p>" +
+        "<p>If you did not expect this invitation, ignore this email and tell Desicon Procurement. Desicon will never ask for passwords or bank details by email.</p>" + Footer);
 
     private static string Summary(InvoiceCase c) =>
         $"<p>Vendor: {E(c.VendorName)} ({E(c.VendorNo)})<br/>Invoice: {E(c.InvoiceNumber)}<br/>PO/SO: {E(c.OrderNumber)}<br/>Amount: {E(c.Currency)} {c.Amount?.ToString("N2", CultureInfo.InvariantCulture)}</p>";

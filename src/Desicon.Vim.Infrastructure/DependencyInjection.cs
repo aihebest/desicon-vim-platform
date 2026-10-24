@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
         services.AddScoped<IReferenceGenerator, SqlSequenceReferenceGenerator>();
         services.AddScoped<IRouteRepository, EfRouteRepository>();
+        services.AddScoped<IVendorAccessRepository, EfVendorAccessRepository>();
         services.AddScoped<IInboundMessageLog, EfInboundMessageLog>();
         services.AddScoped<INotificationOutbox, EfNotificationOutbox>();
         services.AddScoped<RouteSeeder>();

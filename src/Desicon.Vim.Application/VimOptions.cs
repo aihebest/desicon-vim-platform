@@ -45,6 +45,15 @@ public sealed class VimOptions
     /// <summary>Legacy email intake (mailbox). Off: vendors submit on the portal (stakeholder decision, Oct 2026).</summary>
     public bool EmailIntakeEnabled { get; set; }
 
+    /// <summary>Base URL of the vendor portal, used in invitation links. Empty: invitations cannot be sent.</summary>
+    public string PortalUrl { get; set; } = string.Empty;
+
+    /// <summary>How long an invitation link stays valid.</summary>
+    public int InvitationValidityDays { get; set; } = 7;
+
+    /// <summary>Portal users with no sign-in for this long are disabled automatically.</summary>
+    public int VendorDormantDays { get; set; } = 90;
+
     /// <summary>Lagos public holidays (yyyy-MM-dd) excluded from working-hour deadlines.</summary>
     public IList<string> PublicHolidays { get; } = [];
 

@@ -4,6 +4,7 @@ using Desicon.Vim.Application.Abstractions;
 using Desicon.Vim.Application.Notifications;
 using Desicon.Vim.Domain.Cases;
 using Desicon.Vim.Domain.Integrity;
+using Desicon.Vim.Domain.VendorAccess;
 using Desicon.Vim.Domain.Workflow;
 using Microsoft.Extensions.Options;
 
@@ -14,7 +15,7 @@ internal sealed class FakeClock(DateTimeOffset now) : IClock
     public DateTimeOffset UtcNow { get; set; } = now;
 }
 
-internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboundMessageLog, IReferenceGenerator, INotificationOutbox, IUnitOfWork, IDocumentStore
+internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboundMessageLog, IReferenceGenerator, INotificationOutbox, IUnitOfWork, IDocumentStore, IVendorAccessRepository
 {
     private long _seq;
 
@@ -108,6 +109,36 @@ internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboun
     {
     }
 
+    // IVendorAccessRepository
+    public List<VendorInvitation> Invitations { get; } = [];
+
+    public List<VendorUser> VendorUsers { get; } = [];
+
+    public List<VendorAccessEvent> AccessEvents { get; } = [];
+
+    public Task<VendorInvitation?> GetInvitationByTokenHashAsync(string tokenHash, CancellationToken ct) => Task.FromResult(Invitations.SingleOrDefault(i => i.TokenHash == tokenHash));
+
+    public Task<VendorInvitation?> GetInvitationAsync(Guid id, CancellationToken ct) => Task.FromResult(Invitations.SingleOrDefault(i => i.Id == id));
+
+    public Task<IReadOnlyList<VendorInvitation>> ListPendingInvitationsAsync(DateTimeOffset nowUtc, string? vendorNo, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<VendorInvitation>>(Invitations.Where(i => i.IsPending(nowUtc) && (vendorNo == null || i.VendorNo == vendorNo)).ToList());
+
+    public void AddInvitation(VendorInvitation invitation) => Invitations.Add(invitation);
+
+    public Task<VendorUser?> GetUserByExternalIdAsync(string externalUserId, CancellationToken ct) => Task.FromResult(VendorUsers.SingleOrDefault(u => u.ExternalUserId == externalUserId));
+
+    public Task<VendorUser?> GetUserAsync(Guid id, CancellationToken ct) => Task.FromResult(VendorUsers.SingleOrDefault(u => u.Id == id));
+
+    public Task<IReadOnlyList<VendorUser>> ListUsersAsync(string? vendorNo, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<VendorUser>>(VendorUsers.Where(u => vendorNo == null || u.VendorNo == vendorNo).ToList());
+
+    public void AddUser(VendorUser user) => VendorUsers.Add(user);
+
+    public void AddEvent(VendorAccessEvent accessEvent) => AccessEvents.Add(accessEvent);
+
+    public Task<IReadOnlyList<VendorAccessEvent>> ListEventsAsync(string? vendorNo, int take, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<VendorAccessEvent>>(AccessEvents.Where(e => vendorNo == null || e.VendorNo == vendorNo).Take(take).ToList());
+
     // IDocumentStore
     public async Task<StoredDocument> UploadAsync(string caseReference, int round, string fileName, string contentType, Stream content, CancellationToken ct)
     {
@@ -162,5 +193,6 @@ internal static class Opts
         FinanceManagerEmail = "finance.manager@desicon.example",
         AccountsPayableEmail = "ap@desicon.example",
         ManagementEscalationEmail = "dmd.office@desicon.example",
+        PortalUrl = "https://vendors.desicon.example",
     });
 }

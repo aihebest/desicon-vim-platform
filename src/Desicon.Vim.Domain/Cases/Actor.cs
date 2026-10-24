@@ -8,6 +8,9 @@ public sealed record Actor(string Id, string DisplayName, IReadOnlySet<VimRole> 
 {
     public static readonly Actor System = new("system", "VIM Platform", new HashSet<VimRole> { VimRole.System });
 
+    /// <summary>For a vendor portal user: the one Business Central vendor this login may act for.</summary>
+    public string? VendorNo { get; init; }
+
     public bool HasRole(VimRole role) => Roles.Contains(role);
 
     public bool HasAnyRole(IEnumerable<VimRole> roles) => roles.Any(Roles.Contains);

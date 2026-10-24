@@ -13,7 +13,8 @@
    The two APP identities go into one role, vim_app:
      - read and write data (db_datareader + db_datawriter)
      - EXECUTE (stored procedures / functions, if the app uses any)
-     - DENY UPDATE and DELETE on [vim].[AuditEvents] and [vim].[RouteChanges]
+     - DENY UPDATE and DELETE on [vim].[AuditEvents], [vim].[RouteChanges]
+       and [vim].[VendorAccessEvents]
        => the audit trail is INSERT-ONLY for the running application. Even a
           bug or a compromised app cannot rewrite or erase audit history. A
           DENY always beats a GRANT in SQL Server, so db_datawriter cannot
@@ -114,6 +115,12 @@ IF OBJECT_ID(N'[vim].[RouteChanges]', N'U') IS NOT NULL
 BEGIN
     DENY UPDATE, DELETE ON OBJECT::[vim].[RouteChanges] TO [vim_app];
     PRINT 'Applied DENY UPDATE, DELETE on [vim].[RouteChanges] to vim_app (insert-only routing history).';
+END;
+
+IF OBJECT_ID(N'[vim].[VendorAccessEvents]', N'U') IS NOT NULL
+BEGIN
+    DENY UPDATE, DELETE ON OBJECT::[vim].[VendorAccessEvents] TO [vim_app];
+    PRINT 'Applied DENY UPDATE, DELETE on [vim].[VendorAccessEvents] to vim_app (insert-only vendor access log).';
 END;
 
 IF OBJECT_ID(N'[vim].[AuditEvents]', N'U') IS NOT NULL

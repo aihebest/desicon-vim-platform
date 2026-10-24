@@ -1,5 +1,6 @@
 using Desicon.Vim.Domain.Audit;
 using Desicon.Vim.Domain.Cases;
+using Desicon.Vim.Domain.VendorAccess;
 using Desicon.Vim.Domain.Workflow;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,6 +44,12 @@ public sealed class VimDbContext(DbContextOptions<VimDbContext> options) : DbCon
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     public DbSet<InboundMessage> InboundMessages => Set<InboundMessage>();
+
+    public DbSet<VendorInvitation> VendorInvitations => Set<VendorInvitation>();
+
+    public DbSet<VendorUser> VendorUsers => Set<VendorUser>();
+
+    public DbSet<VendorAccessEvent> VendorAccessEvents => Set<VendorAccessEvent>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
