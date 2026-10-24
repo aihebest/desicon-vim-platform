@@ -1,7 +1,9 @@
 <nav class="nav">
-    <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
-    <NavLink href="queue">My queue</NavLink>
-    <NavLink href="cases">All cases</NavLink>
+    <AuthorizeView Policy="@Policies.AnyVimUser">
+        <NavLink href="" Match="NavLinkMatch.All">Dashboard</NavLink>
+        <NavLink href="queue">My queue</NavLink>
+        <NavLink href="cases">All cases</NavLink>
+    </AuthorizeView>
     <AuthorizeView Policy="@Policies.AccountsPayable">
         <NavLink href="submit">Submit for a vendor</NavLink>
     </AuthorizeView>

@@ -21,6 +21,7 @@ internal sealed class VendorInvitationConfiguration : IEntityTypeConfiguration<V
         builder.Property(x => x.CreatedByName).HasMaxLength(Len.PersonName).IsRequired();
         builder.Property(x => x.AcceptedByUserId).HasMaxLength(Len.ExternalUserId);
         builder.Property(x => x.RevokedById).HasMaxLength(Len.EntraId);
+        builder.Property(x => x.RowVersion).IsRowVersion();
         builder.HasIndex(x => x.TokenHash).IsUnique();
         builder.HasIndex(x => new { x.VendorNo, x.Email });
     }

@@ -54,6 +54,12 @@ public sealed class VimOptions
     /// <summary>Portal users with no sign-in for this long are disabled automatically.</summary>
     public int VendorDormantDays { get; set; } = 90;
 
+    /// <summary>
+    /// Desicon's own email domains (e.g. desicongroup.com). Staff addresses can never be invited
+    /// to the portal, so no employee can hold a vendor login.
+    /// </summary>
+    public IList<string> StaffEmailDomains { get; } = [];
+
     /// <summary>Lagos public holidays (yyyy-MM-dd) excluded from working-hour deadlines.</summary>
     public IList<string> PublicHolidays { get; } = [];
 

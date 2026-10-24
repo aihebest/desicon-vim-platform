@@ -56,6 +56,7 @@ namespace Desicon.Vim.Infrastructure.Persistence.Migrations
                     AcceptedByUserId = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
                     RevokedAtUtc = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
                     RevokedById = table.Column<string>(type: "nvarchar(100)", maxLength: 100, nullable: true),
+                    RowVersion = table.Column<byte[]>(type: "rowversion", rowVersion: true, nullable: false),
                 },
                 constraints: table =>
                 {

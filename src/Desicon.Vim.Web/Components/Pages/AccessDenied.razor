@@ -26,6 +26,10 @@
                    (Document Controller, Reviewer, Accounts Payable, Finance Manager, Platform Admin or Auditor).
                    If you were added in the last few minutes, sign out and sign in again so Microsoft issues a new sign-in with the role.</p>
             }
+            else if (roles.Contains("Vim.Procurement") && roles.All(r => r is "Vim.Procurement"))
+            {
+                <p>Procurement manages vendor portal access only. <a class="button" href="vendors">Go to Vendors → Portal access</a></p>
+            }
             else
             {
                 <p>Roles in your sign-in: <strong>@string.Join(", ", roles)</strong>.

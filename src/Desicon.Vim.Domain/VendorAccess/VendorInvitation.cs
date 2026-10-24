@@ -53,6 +53,9 @@ public sealed class VendorInvitation
 
     public DateTimeOffset ExpiresAtUtc { get; private set; }
 
+    /// <summary>Optimistic concurrency: two simultaneous accepts cannot both succeed.</summary>
+    public byte[] RowVersion { get; private set; } = [];
+
     public DateTimeOffset? AcceptedAtUtc { get; private set; }
 
     public string? AcceptedByUserId { get; private set; }
@@ -152,7 +155,13 @@ public sealed class VendorInvitation
             throw new DomainRuleException(RuleCodes.RoleNotPermitted, "Only Procurement or the Finance Manager can withdraw an invitation.");
         }
 
-        if (AcceptedAtUtc is not null || RevokedAtUtc is not null)
+        if (AcceptedAtUtc is not null)
+        {
+            throw new DomainRuleException(RuleCodes.InvalidValue,
+                "This invitation was already accepted, so withdrawing it changes nothing. Remove the portal user instead.");
+        }
+
+        if (RevokedAtUtc is not null)
         {
             return;
         }

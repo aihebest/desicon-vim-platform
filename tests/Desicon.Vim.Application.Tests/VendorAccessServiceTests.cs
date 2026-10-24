@@ -142,4 +142,44 @@ public class VendorAccessServiceTests
         Assert.Equal(PortalAccess.Allowed, again.Access);
         Assert.False(user.IsDisabled);
     }
+
+    [Fact]
+    public async Task Staff_addresses_can_never_be_invited()
+    {
+        var ex = await Assert.ThrowsAsync<DomainRuleException>(() =>
+            Service().InviteAsync(Procurement, "V0001", "halima@desicon.example", ContactConfirmation.PhoneCallBack, "Called the vendor back on 0803 000 0000", default));
+        Assert.Equal(RuleCodes.SegregationOfDuties, ex.Code);
+
+        await Assert.ThrowsAsync<DomainRuleException>(() =>
+            Service().InviteAsync(Procurement, "V0001", "x@mail.desicon.example", ContactConfirmation.PhoneCallBack, "Called the vendor back on 0803 000 0000", default));
+        Assert.Empty(_store.Invitations);
+    }
+
+    [Fact]
+    public async Task A_call_back_invitation_is_reported_to_the_finance_manager()
+    {
+        await Service().InviteAsync(Procurement, "V0001", "ops@abc-partner.example", ContactConfirmation.PhoneCallBack, "Called Mr Ade on 0803 000 0000 (on file), 24 Oct", default);
+
+        var notice = Assert.Single(_store.Sent, n => n.Template == "PortalCallBackInvitationNotice");
+        Assert.Equal("finance.manager@desicon.example", notice.ToAddress);
+        Assert.Contains("ops@abc-partner.example", notice.HtmlBody, StringComparison.Ordinal);
+        Assert.DoesNotContain("/invite/", notice.HtmlBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Withdrawing_an_accepted_invitation_is_refused_and_removal_withdraws_pending_ones()
+    {
+        var token = await InviteAsync();
+        await Service().AcceptInvitationAsync(token, new PortalSignIn("tid:oid-1", "accounts@abc.example"), default);
+        var accepted = Assert.Single(_store.Invitations);
+        await Assert.ThrowsAsync<DomainRuleException>(() => Service().WithdrawInvitationAsync(accepted.Id, Procurement, default));
+
+        var second = await InviteAsync();
+        var user = Assert.Single(_store.VendorUsers);
+        await Service().DisableUserAsync(user.Id, "Contact left the company", Procurement, default);
+
+        Assert.DoesNotContain(_store.Invitations, i => i.IsPending(Now));
+        var again = await Service().AcceptInvitationAsync(second, new PortalSignIn("tid:oid-1", "accounts@abc.example"), default);
+        Assert.NotEqual(PortalAccess.Allowed, again.Access);
+    }
 }

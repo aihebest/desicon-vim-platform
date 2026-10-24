@@ -69,6 +69,15 @@ public sealed class VendorAccessService(
             throw new DomainRuleException(RuleCodes.InvalidValue, $"Vendor {number} is blocked in Business Central and cannot be invited.");
         }
 
+        // No employee may hold a vendor login (segregation of duties).
+        var normalised = VendorInvitation.NormaliseEmail(email);
+        var domain = normalised[(normalised.LastIndexOf('@') + 1)..];
+        if (o.StaffEmailDomains.Any(d => IsSameOrSubdomain(domain, d)))
+        {
+            throw new DomainRuleException(RuleCodes.SegregationOfDuties,
+                "Desicon staff email addresses cannot be invited to the vendor portal. Invite the vendor's own contact.");
+        }
+
         var ctx = ActionContext.For(actor, clock.UtcNow);
         var (invitation, token) = VendorInvitation.Create(
             vendor.VendorNo, vendor.Name, email, confirmation, confirmationNote, vendor.Emails,
@@ -88,8 +97,29 @@ public sealed class VendorAccessService(
 
         var link = $"{o.PortalUrl.TrimEnd('/')}/invite/{token}";
         outbox.Enqueue(NotificationTemplates.PortalInvitation(invitation, link));
+
+        // A call-back confirmation rests on one person's word, so the Finance Manager is told
+        // straight away and can withdraw the invitation before it is used.
+        if (confirmation == ContactConfirmation.PhoneCallBack)
+        {
+            if (!string.IsNullOrWhiteSpace(o.FinanceManagerEmail))
+            {
+                outbox.Enqueue(NotificationTemplates.PortalCallBackInvitationNotice(invitation, actor.DisplayName, o.FinanceManagerEmail, o.WorkbenchUrl));
+            }
+            else
+            {
+                logger.LogWarning("Vim:FinanceManagerEmail is not configured; call-back invitation for vendor {VendorNo} was not reported.", invitation.VendorNo);
+            }
+        }
+
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
         return invitation;
+    }
+
+    private static bool IsSameOrSubdomain(string domain, string staffDomain)
+    {
+        var d = staffDomain.Trim().TrimStart('@').ToLowerInvariant();
+        return d.Length > 0 && (domain == d || domain.EndsWith("." + d, StringComparison.Ordinal));
     }
 
     public async Task WithdrawInvitationAsync(Guid invitationId, Actor actor, CancellationToken ct)
@@ -109,6 +139,14 @@ public sealed class VendorAccessService(
         var ctx = ActionContext.For(actor, clock.UtcNow);
         user.Disable(reason, ctx);
         access.AddEvent(VendorAccessEvent.Create("UserDisabled", user.VendorNo, user.Email, actor, ctx.NowUtc, reason));
+
+        // A pending invitation for the same person would otherwise re-activate the removed login.
+        foreach (var pending in (await access.ListPendingInvitationsAsync(ctx.NowUtc, user.VendorNo, ct).ConfigureAwait(false))
+                     .Where(i => i.Email == user.Email))
+        {
+            pending.Revoke(ctx);
+            access.AddEvent(VendorAccessEvent.Create("InvitationWithdrawn", pending.VendorNo, pending.Email, actor, ctx.NowUtc, "Withdrawn because the user was removed."));
+        }
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 

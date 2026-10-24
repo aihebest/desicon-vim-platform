@@ -93,6 +93,14 @@ public static class NotificationTemplates
         $"<p>Sign in with <strong>this email address ({E(invitation.Email)})</strong>; you will receive a one-time code to confirm it. The link works once and expires on {Wat(invitation.ExpiresAtUtc)}.</p>" +
         "<p>If you did not expect this invitation, ignore this email and tell Desicon Procurement. Desicon will never ask for passwords or bank details by email.</p>" + Footer);
 
+    public static OutboundNotification PortalCallBackInvitationNotice(VendorInvitation invitation, string invitedBy, string financeManagerEmail, string workbenchUrl) => new(
+        Guid.Empty, nameof(PortalCallBackInvitationNotice), NotificationChannel.Email, financeManagerEmail,
+        $"Check: vendor portal invitation by call-back for {invitation.VendorName}",
+        $"<p>{E(invitedBy)} invited <strong>{E(invitation.Email)}</strong> to the vendor portal for {E(invitation.VendorName)} ({E(invitation.VendorNo)}).</p>" +
+        "<p>The address is <strong>not</strong> on the Business Central vendor card; it was confirmed by a call-back:</p>" +
+        $"<blockquote>{E(invitation.ConfirmationNote)}</blockquote>" +
+        $"<p>If this does not look right, withdraw it before it is used: <a href=\"{E(workbenchUrl.TrimEnd('/'))}/vendors\">Vendors → Portal access</a>. The link expires on {Wat(invitation.ExpiresAtUtc)}.</p>" + Footer);
+
     private static string Summary(InvoiceCase c) =>
         $"<p>Vendor: {E(c.VendorName)} ({E(c.VendorNo)})<br/>Invoice: {E(c.InvoiceNumber)}<br/>PO/SO: {E(c.OrderNumber)}<br/>Amount: {E(c.Currency)} {c.Amount?.ToString("N2", CultureInfo.InvariantCulture)}</p>";
 

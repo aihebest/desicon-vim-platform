@@ -30,8 +30,12 @@ public static class Policies
     public static AuthorizationOptions AddVimPolicies(this AuthorizationOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
-        var all = Enum.GetValues<VimRole>().Where(r => r is not VimRole.System and not VimRole.Vendor).Select(RoleName).ToArray();
-        options.AddPolicy(AnyVimUser, p => p.RequireAuthenticatedUser().RequireRole(all));
+        // Case readers: every staff role except Procurement, which manages portal access
+        // only and has no business reading invoices or their documents (least privilege).
+        var caseReaders = Enum.GetValues<VimRole>()
+            .Where(r => r is not VimRole.System and not VimRole.Vendor and not VimRole.Procurement)
+            .Select(RoleName).ToArray();
+        options.AddPolicy(AnyVimUser, p => p.RequireAuthenticatedUser().RequireRole(caseReaders));
         options.AddPolicy(DocumentController, p => p.RequireRole(RoleName(VimRole.DocumentController)));
         options.AddPolicy(Reviewer, p => p.RequireRole(RoleName(VimRole.Reviewer)));
         options.AddPolicy(AccountsPayable, p => p.RequireRole(RoleName(VimRole.AccountsPayable)));

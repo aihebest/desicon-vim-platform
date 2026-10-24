@@ -187,12 +187,17 @@ internal sealed class FakeErp : IErpGateway
 
 internal static class Opts
 {
-    public static IOptions<VimOptions> Default() => Options.Create(new VimOptions
+    public static IOptions<VimOptions> Default()
     {
-        WorkbenchUrl = "https://vim.desicon.example",
-        FinanceManagerEmail = "finance.manager@desicon.example",
-        AccountsPayableEmail = "ap@desicon.example",
-        ManagementEscalationEmail = "dmd.office@desicon.example",
-        PortalUrl = "https://vendors.desicon.example",
-    });
+        var o = new VimOptions
+        {
+            WorkbenchUrl = "https://vim.desicon.example",
+            FinanceManagerEmail = "finance.manager@desicon.example",
+            AccountsPayableEmail = "ap@desicon.example",
+            ManagementEscalationEmail = "dmd.office@desicon.example",
+            PortalUrl = "https://vendors.desicon.example",
+        };
+        o.StaffEmailDomains.Add("desicon.example");
+        return Options.Create(o);
+    }
 }
