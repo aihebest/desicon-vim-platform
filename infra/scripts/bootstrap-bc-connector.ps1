@@ -18,7 +18,8 @@
     What this script does (main tenant, run as an admin who can create app registrations):
       1. Creates "Desicon VIM Business Central connector (<env>)", multi-tenant,
          requesting the Business Central API application permission.
-      2. Adds one federated credential per VIM app (web + functions), trusting
+      2. Adds one federated credential per VIM app (web + functions, and the vendor
+         portal when it exists -- re-run after enabling it), trusting
          each app's system-assigned managed identity.
       3. Prints the admin-consent link for the BC tenant and the BC steps.
 
@@ -68,14 +69,19 @@ $homeTenant = az account show --query tenantId -o tsv
 if (-not $homeTenant) { throw "Not signed in. Run: az login" }
 Write-Host "Main tenant: $homeTenant   Business Central tenant: $BcTenant" -ForegroundColor Cyan
 
-# -- The two managed identities that will call Business Central -------------------
-$webPrincipal = az webapp list -g $ResourceGroup --query "[?kind=='app,linux'].identity.principalId | [0]" -o tsv
+# -- The managed identities that will call Business Central ----------------------
+# Pick web apps by name (the workbench is app-*, the vendor portal vendors-*), filtering in
+# PowerShell so the query has no brackets to trip over Windows quoting.
+$webApps = @(az webapp list -g $ResourceGroup -o json | ConvertFrom-Json)
+$webPrincipal = ($webApps | Where-Object { $_.name -like 'app-*' } | Select-Object -First 1).identity.principalId
+$portalPrincipal = ($webApps | Where-Object { $_.name -like 'vendors-*' } | Select-Object -First 1).identity.principalId
 $funcPrincipal = az functionapp list -g $ResourceGroup --query "[0].identity.principalId" -o tsv
 if (-not $webPrincipal -or -not $funcPrincipal) {
     throw "Could not find the web app and function app managed identities in $ResourceGroup. Run the Terraform deployment first."
 }
 Write-Host "Web app identity:      $webPrincipal"
 Write-Host "Function app identity: $funcPrincipal"
+if ($portalPrincipal) { Write-Host "Vendor portal identity: $portalPrincipal" }
 
 # -- 1. Connector app registration -------------------------------------------------
 $tmp = [IO.Path]::GetTempPath()
@@ -116,6 +122,8 @@ function Add-Trust([string] $name, [string] $principalId, [string] $what) {
 }
 Add-Trust "vim-web-$Environment" $webPrincipal 'web app'
 Add-Trust "vim-func-$Environment" $funcPrincipal 'function app'
+# The portal reads BC only to refuse vendors that are blocked there.
+if ($portalPrincipal) { Add-Trust "vim-portal-$Environment" $portalPrincipal 'vendor portal' }
 
 # -- 3. What to do next ----------------------------------------------------------------
 $bcEnv = if ($Environment -eq 'prod') { 'Production' } else { 'Sandbox' }

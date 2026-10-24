@@ -13,6 +13,9 @@
 #   func            Storage Queue Data Contributor    Functions host storage
 #   func            Storage Table Data Contributor    Functions host storage
 #
+# The vendor portal gets NO Azure role in phase 1: it touches only its own SQL
+# tables (create-portal-sql-user.sql). Phase 2 adds upload access deliberately.
+#
 # Microsoft Graph mailbox access for the function app is NOT granted here --
 # see infra/scripts/grant-mailbox-access.ps1 and the note in
 # docs/operations/infrastructure.md.

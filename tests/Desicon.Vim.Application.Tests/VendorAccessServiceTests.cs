@@ -182,4 +182,22 @@ public class VendorAccessServiceTests
         var again = await Service().AcceptInvitationAsync(second, new PortalSignIn("tid:oid-1", "accounts@abc.example"), default);
         Assert.NotEqual(PortalAccess.Allowed, again.Access);
     }
+
+    [Fact]
+    public async Task The_invitation_page_preview_changes_nothing_and_hides_used_links()
+    {
+        var token = await InviteAsync();
+
+        var preview = await Service().PreviewInvitationAsync(token, default);
+        Assert.NotNull(preview);
+        Assert.True(preview.Usable);
+        Assert.Equal("V0001", preview.VendorNo);
+        Assert.Empty(_store.VendorUsers);
+        Assert.Null(await Service().PreviewInvitationAsync("not-a-real-token", default));
+
+        await Service().AcceptInvitationAsync(token, new PortalSignIn("tid:oid-1", "accounts@abc.example"), default);
+        var used = await Service().PreviewInvitationAsync(token, default);
+        Assert.NotNull(used);
+        Assert.False(used.Usable);
+    }
 }

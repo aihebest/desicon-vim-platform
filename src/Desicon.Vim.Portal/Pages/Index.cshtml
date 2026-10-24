@@ -1,0 +1,20 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home";
+}
+@if (Model.Result.Access == PortalAccess.Allowed && Model.Result.User is { } u)
+{
+    <h1>Welcome, @u.VendorName</h1>
+    <section class="card">
+        <p>You are signed in as <strong>@u.Email</strong> for vendor account <strong>@u.VendorNo</strong>.</p>
+        <p class="muted">Invoice submission and tracking open here soon. Until then, please continue to send invoices as agreed with Desicon Accounts Payable.</p>
+    </section>
+}
+else
+{
+    <h1>Access needed</h1>
+    <section class="card warn">
+        <p>@Model.Result.Message</p>
+    </section>
+}
