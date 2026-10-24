@@ -5,6 +5,8 @@
 #
 #   1. The web app (Desicon.Vim.Web) -- the Blazor internal workbench staff
 #      sign in to with Microsoft Entra ID.
+#   3. The vendor portal (Desicon.Vim.Portal), only when var.vendor_portal.enabled
+#      -- vendors sign in with Microsoft Entra External ID, never staff Entra ID.
 #   2. The function app (Desicon.Vim.Functions) -- background timer jobs:
 #      mailbox intake (every 5 min), SLA escalation (every 15 min) and outbox
 #      notification dispatch (every 1 min).
@@ -37,6 +39,8 @@ terraform {
 }
 
 locals {
+  portal_url = var.vendor_portal.enabled ? "https://${var.vendor_portal.app_name}.azurewebsites.net" : ""
+
   # Business Central checks switch on once the connector's client ID is set
   # (GitHub variable BC_CLIENT_ID), or when vim_settings forces them on.
   # Settings both apps read. Keys use "__" because Linux App Service does not
@@ -59,6 +63,9 @@ locals {
     "Vim__AccountsPayableEmail"      = var.vim_settings.accounts_payable_email
     "Vim__VerificationHours"         = tostring(var.vim_settings.verification_hours)
     "Vim__VerificationBasis"         = var.vim_settings.verification_basis
+
+    # The workbench puts this address in invitation emails; empty = invitations off.
+    "Vim__PortalUrl" = local.portal_url
   }
 
   # WEBSITES_CONTAINER_START_TIME_LIMIT: a cold start on the small dev plan can
@@ -68,6 +75,15 @@ locals {
     "AzureAd__Instance"                     = "https://login.microsoftonline.com/"
     "AzureAd__TenantId"                     = var.entra_tenant_id
     "AzureAd__ClientId"                     = var.entra_workbench_client_id
+    "WEBSITES_CONTAINER_START_TIME_LIMIT"   = "600"
+  })
+
+  # The portal signs in against the External ID tenant (ciamlogin.com), not the
+  # staff tenant. Secretless: id_token only, like the workbench.
+  portal_app_settings = merge(local.shared_app_settings, {
+    "APPLICATIONINSIGHTS_CONNECTION_STRING" = var.app_insights_connection_string
+    "AzureAd__Authority"                    = var.vendor_portal.authority
+    "AzureAd__ClientId"                     = var.vendor_portal.client_id
     "WEBSITES_CONTAINER_START_TIME_LIMIT"   = "600"
   })
 
@@ -205,6 +221,62 @@ resource "azurerm_linux_web_app" "web" {
   tags = var.tags
 }
 
+# -- Vendor portal: Desicon.Vim.Portal ------------------------------------------------
+# Same plan as the workbench, so no extra compute bill.
+resource "azurerm_linux_web_app" "portal" {
+  count = var.vendor_portal.enabled ? 1 : 0
+
+  name                = var.vendor_portal.app_name
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  service_plan_id     = azurerm_service_plan.this.id
+
+  https_only                    = true
+  public_network_access_enabled = true # vendors reach it over the internet; External ID sign-in protects it
+  virtual_network_subnet_id     = var.app_subnet_id
+
+  # Razor Pages with cookie sign-in: no per-instance server state, so no affinity.
+  client_affinity_enabled = false
+
+  ftp_publish_basic_authentication_enabled       = false
+  webdeploy_publish_basic_authentication_enabled = false
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  site_config {
+    always_on                         = var.always_on
+    ftps_state                        = "Disabled"
+    minimum_tls_version               = "1.2"
+    scm_minimum_tls_version           = "1.2"
+    http2_enabled                     = true
+    health_check_path                 = "/health"
+    health_check_eviction_time_in_min = 5
+    vnet_route_all_enabled            = var.app_subnet_id != null
+
+    application_stack {
+      dotnet_version = "10.0"
+    }
+  }
+
+  app_settings = local.portal_app_settings
+
+  logs {
+    detailed_error_messages = true
+    failed_request_tracing  = true
+
+    http_logs {
+      file_system {
+        retention_in_days = 7
+        retention_in_mb   = 35
+      }
+    }
+  }
+
+  tags = var.tags
+}
+
 # -- Function app: Desicon.Vim.Functions -------------------------------------------
 resource "azurerm_linux_function_app" "func" {
   name                = var.function_app_name
@@ -273,6 +345,22 @@ resource "azurerm_monitor_diagnostic_setting" "plan" {
 resource "azurerm_monitor_diagnostic_setting" "web" {
   name                       = "diag-${var.web_app_name}"
   target_resource_id         = azurerm_linux_web_app.web.id
+  log_analytics_workspace_id = var.log_analytics_workspace_id
+
+  enabled_log {
+    category_group = "allLogs"
+  }
+
+  enabled_metric {
+    category = "AllMetrics"
+  }
+}
+
+resource "azurerm_monitor_diagnostic_setting" "portal" {
+  count = var.vendor_portal.enabled ? 1 : 0
+
+  name                       = "diag-${var.vendor_portal.app_name}"
+  target_resource_id         = azurerm_linux_web_app.portal[0].id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
   enabled_log {

@@ -67,3 +67,13 @@ output "private_networking_enabled" {
   description = "Whether data services are reachable only through private endpoints."
   value       = var.enable_private_networking
 }
+
+output "portal_app_name" {
+  description = "Vendor portal app name; empty when the portal is off."
+  value       = module.app_hosting.portal_app_name == null ? "" : module.app_hosting.portal_app_name
+}
+
+output "portal_url" {
+  description = "Vendor portal address; empty when the portal is off."
+  value       = module.app_hosting.portal_default_hostname == null ? "" : "https://${module.app_hosting.portal_default_hostname}"
+}

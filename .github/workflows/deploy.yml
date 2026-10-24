@@ -3,7 +3,7 @@
 #
 # Push to main (when DEPLOY_ON_PUSH = 'true') or run manually => build once => dev => uat => prod.
 #
-#   build     publish Desicon.Vim.Web, Desicon.Vim.Functions and an EF Core
+#   build     publish Desicon.Vim.Web, Desicon.Vim.Portal, Desicon.Vim.Functions and an EF Core
 #             migration bundle ONCE; every environment deploys the same bits.
 #   dev/uat/prod   each calls deploy-environment.yml, which runs:
 #       plan    (GitHub environment "<env>-plan", no approval)
@@ -77,6 +77,9 @@ jobs:
       - name: Publish web
         run: dotnet publish src/Desicon.Vim.Web/Desicon.Vim.Web.csproj -c Release --no-restore -o out/web
 
+      - name: Publish vendor portal
+        run: dotnet publish src/Desicon.Vim.Portal/Desicon.Vim.Portal.csproj -c Release --no-restore -o out/portal
+
       - name: Publish functions
         run: dotnet publish src/Desicon.Vim.Functions/Desicon.Vim.Functions.csproj -c Release --no-restore -o out/functions
 
@@ -100,6 +103,13 @@ jobs:
         with:
           name: web
           path: out/web
+          retention-days: 7
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: portal
+          path: out/portal
           retention-days: 7
           if-no-files-found: error
 

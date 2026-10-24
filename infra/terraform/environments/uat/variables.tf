@@ -285,3 +285,21 @@ variable "vim_settings" {
   })
   default = {}
 }
+
+variable "vendor_portal_enabled" {
+  description = "Create the vendor portal app (GitHub variable VENDOR_PORTAL_ENABLED). Needs externalid_subdomain and portal_client_id."
+  type        = bool
+  default     = false
+}
+
+variable "externalid_subdomain" {
+  description = "Subdomain of the Entra External ID tenant, e.g. desiconvendors for desiconvendors.ciamlogin.com (GitHub variable EXTERNALID_SUBDOMAIN)."
+  type        = string
+  default     = ""
+}
+
+variable "portal_client_id" {
+  description = "Application (client) ID of the vendor portal app registration in the External ID tenant (GitHub variable PORTAL_CLIENT_ID)."
+  type        = string
+  default     = ""
+}

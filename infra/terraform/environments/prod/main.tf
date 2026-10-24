@@ -52,6 +52,7 @@ locals {
     plan           = "asp-${local.base}"
     web_app        = "app-${local.base}-${local.suffix}"
     function_app   = "func-${local.base}-${local.suffix}"
+    portal_app     = "vendors-${local.base}-${local.suffix}"
     vnet           = "vnet-${local.base}"
   }
 
@@ -278,6 +279,13 @@ module "app_hosting" {
   mailbox_user_id                = var.mailbox_user_id
   vim_settings                   = var.vim_settings
 
+  vendor_portal = {
+    enabled   = var.vendor_portal_enabled
+    app_name  = local.names.portal_app
+    authority = var.externalid_subdomain == "" ? "" : "https://${var.externalid_subdomain}.ciamlogin.com/"
+    client_id = var.portal_client_id
+  }
+
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   tags                       = local.tags
 }
@@ -292,4 +300,6 @@ module "role_assignments" {
   docintel_account_id            = module.docintel.id
   key_vault_id                   = module.keyvault.id
   host_storage_account_id        = module.app_hosting.host_storage_account_id
+  portal_enabled                 = var.vendor_portal_enabled
+  portal_principal_id            = module.app_hosting.portal_principal_id
 }
