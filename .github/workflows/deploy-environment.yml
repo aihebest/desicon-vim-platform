@@ -17,6 +17,8 @@
 #   BC_TENANT_ID (desiconerp.com), BC_ENVIRONMENT
 #   [BC_CLIENT_ID]  connector client id; empty = BC checks off  [BC_COMPANY_ID]  optional
 #   [ALERT_EMAILS]  comma-separated addresses for operational alerts; empty = none
+#   [VENDOR_PORTAL_ENABLED]  "true" to create and deploy the vendor portal, with
+#   [EXTERNALID_SUBDOMAIN] (xxx of xxx.ciamlogin.com) and [PORTAL_CLIENT_ID]
 #   MAILBOX_USER_ID
 #   [KEYVAULT_SECRETS_OFFICER_OBJECT_IDS]  HCL list, e.g. ["<group-object-id>"]
 #   AZURE_MIGRATION_CLIENT_ID   ("<env>" only) the migration identity
@@ -85,6 +87,9 @@ jobs:
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
       TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
+      TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
+      TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
+      TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v7
@@ -211,6 +216,9 @@ jobs:
       TF_VAR_business_central_client_id: ${{ vars.BC_CLIENT_ID }}
       TF_VAR_mailbox_user_id: ${{ vars.MAILBOX_USER_ID }}
       TF_VAR_alert_emails: ${{ vars.ALERT_EMAILS }}
+      TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
+      TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
+      TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v7
@@ -265,6 +273,8 @@ jobs:
             echo "sql_server_name=$(out sql_server_name)"
             echo "sql_server_fqdn=$(out sql_server_fqdn)"
             echo "sql_database_name=$(out sql_database_name)"
+            echo "portal_app_name=$(out portal_app_name)"
+            echo "portal_url=$(out portal_url)"
             echo "private_networking=$(terraform -chdir="$TF_DIR" output -json private_networking_enabled)"
           } >> "$GITHUB_OUTPUT"
 
@@ -354,6 +364,19 @@ jobs:
           package: web
 
       - uses: actions/download-artifact@v8
+        if: ${{ !inputs.infra_only && steps.tfout.outputs.portal_app_name != '' }}
+        with:
+          name: portal
+          path: portal
+
+      - name: Deploy vendor portal
+        if: ${{ !inputs.infra_only && steps.tfout.outputs.portal_app_name != '' }}
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ steps.tfout.outputs.portal_app_name }}
+          package: portal
+
+      - uses: actions/download-artifact@v8
         if: ${{ !inputs.infra_only }}
         with:
           name: functions
@@ -389,6 +412,20 @@ jobs:
                     -n "${{ steps.tfout.outputs.function_app_name }}" --query state -o tsv)
           echo "Function app state: $state"
           [ "$state" = "Running" ]
+
+      - name: Smoke test vendor portal GET /health
+        if: ${{ !inputs.infra_only && steps.tfout.outputs.portal_url != '' }}
+        run: |
+          url="${{ steps.tfout.outputs.portal_url }}/health"
+          echo "Checking $url"
+          for i in $(seq 1 30); do
+            code=$(curl --silent --output /tmp/portal-health.txt --write-out '%{http_code}' --max-time 30 "$url" || true)
+            echo "attempt $i: HTTP $code"
+            if [ "$code" = "200" ]; then cat /tmp/portal-health.txt; echo; exit 0; fi
+            sleep 10
+          done
+          echo "::error::$url did not return 200. Check the portal's SQL user (create-sql-users.sql) and its app settings."
+          exit 1
 
       # If the app did not come up, pull its container log and surface the error
       # lines as annotations, so the cause is visible on the run's summary page.

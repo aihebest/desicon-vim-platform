@@ -47,3 +47,18 @@ output "host_storage_account_name" {
   description = "Name of the Functions host storage account."
   value       = azurerm_storage_account.host.name
 }
+
+output "portal_app_name" {
+  description = "Vendor portal app name (its managed identity has the same display name), or null when the portal is off."
+  value       = one(azurerm_linux_web_app.portal[*].name)
+}
+
+output "portal_default_hostname" {
+  description = "Vendor portal default hostname, or null when the portal is off."
+  value       = one(azurerm_linux_web_app.portal[*].default_hostname)
+}
+
+output "portal_principal_id" {
+  description = "Object ID of the vendor portal's managed identity, or null when the portal is off."
+  value       = one(azurerm_linux_web_app.portal[*].identity[0].principal_id)
+}
