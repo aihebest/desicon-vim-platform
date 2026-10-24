@@ -1,6 +1,5 @@
 using Desicon.Vim.Application;
 using Desicon.Vim.Infrastructure;
-using Desicon.Vim.Infrastructure.Erp;
 using Desicon.Vim.Portal.Security;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -47,7 +46,9 @@ app.MapControllers();
 app.MapRazorPages();
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
-    Predicate = c => !c.Tags.Contains(BusinessCentralHealthCheck.Tag),
+    // Database only: the portal has no document-storage access in phase 1, and Business
+    // Central is checked separately by the workbench.
+    Predicate = c => c.Name == "sql",
 }).AllowAnonymous();
 
 await app.RunAsync().ConfigureAwait(false);

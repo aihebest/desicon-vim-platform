@@ -25,8 +25,20 @@ public static class PortalClaims
             ?? throw new UnauthorizedAccessException("The sign-in token has no object id.");
         var tid = user.FindFirstValue(TenantIdClaim) ?? user.FindFirstValue("tid")
             ?? throw new UnauthorizedAccessException("The sign-in token has no tenant id.");
+        // Only the External ID tenant's own email one-time-passcode accounts are accepted: that is
+        // what proves the person controls the email the invitation was sent to. A federated
+        // sign-in (Google, a partner's IdP, ...) carries an "idp" claim naming another issuer and
+        // its email may never have been verified by us, so it is refused.
+        var idp = user.FindFirstValue("idp") ?? user.FindFirstValue("http://schemas.microsoft.com/identity/claims/identityprovider");
+        if (idp is not null && !idp.Contains(tid, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new UnauthorizedAccessException("Sign in with your email address and one-time passcode.");
+        }
+
+        // The "email" claim only (optional claim on the app registration). Never
+        // preferred_username, which is not a verified address.
         var email = user.FindFirstValue("email") ?? user.FindFirstValue(ClaimTypes.Email)
-            ?? user.FindFirstValue("preferred_username") ?? string.Empty;
+            ?? throw new UnauthorizedAccessException("The sign-in token has no email address.");
         return new PortalSignIn($"{tid}:{oid}", email);
     }
 }

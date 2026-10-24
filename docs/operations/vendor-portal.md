@@ -15,8 +15,9 @@ Phase 1 is **sign-in and invitations only**. Vendors cannot submit invoices yet.
    - Procurement picks the Business Central vendor.
    - Then they confirm the email in one of two ways:
      - The email is on the vendor card in Business Central.
-     - Procurement called the vendor back on a known number and noted the call (at least 15 characters).
-2. **The contact receives an email with a one-time link.** The link is valid for 7 days. The database stores only a SHA-256 hash of the token.
+     - Procurement called the vendor back on a known number and noted the call (at least 15 characters). **The Finance Manager is emailed about every call-back invitation** and can withdraw it before it is used.
+   - Desicon staff addresses (`Vim:StaffEmailDomains`, set to `desicongroup.com` and `desiconerp.com`) can never be invited, so no employee can hold a vendor login.
+2. **The contact receives an email with a one-time link.** The link is valid for 7 days. The database stores only a SHA-256 hash of the token. The email is not kept in the shared mailbox's Sent Items, and the link is removed from the stored copy once sent.
 3. **The contact opens the link and signs in.** External ID emails them a passcode. The portal shows the invitation.
 4. **The contact presses Accept.** Their login is now bound to that one vendor. The invitation's email must match the email they signed in with, so a forwarded link fails. Opening the link alone changes nothing, so a mail scanner that follows links cannot accept an invitation.
 5. **Every visit is checked again.** The portal refuses access in each of these cases:
@@ -55,6 +56,7 @@ Do these steps in order. Steps 1 to 3 are in the Microsoft Entra admin center, a
    - Name: `vendor-signin`.
    - Identity provider: **Email one-time passcode**.
    - Attribute to collect: Display Name.
+   - **Do not add Google, Facebook or any other identity provider.** The portal refuses those sign-ins. Only the email passcode proves the person controls the invited address.
 
 ### 3. App registration (script)
 
@@ -70,14 +72,15 @@ az login --tenant <external-tenant-id> --allow-no-subscriptions
 
 1. Run **Deploy** (Actions → Deploy → Run workflow).
 2. Terraform creates the portal app and sets `Vim__PortalUrl` on the workbench. With that set, Procurement can send invitations.
-3. Terraform also grants the portal's identity access to the documents storage account.
+3. The portal gets **no** Azure storage or Key Vault access in phase 1. Its only data access is its own database tables (step 5a).
 
 ### 5. After the first portal deploy
 
 The deploy's portal smoke test fails until step 5a is done. That is expected; re-run Deploy afterwards.
 
 ```powershell
-# a. Database user for the portal (as a member of the SQL admin group)
+# a. Database user for the portal (as a member of the SQL admin group).
+#    It can only read and write the vendor invitation and user tables, and add to the access log.
 az login
 sqlcmd -S <sql_server_fqdn> -d VimDb --authentication-method ActiveDirectoryDefault `
        -i infra\scripts\create-portal-sql-user.sql -v PortalAppName="<terraform output portal_app_name>"
@@ -86,7 +89,8 @@ sqlcmd -S <sql_server_fqdn> -d VimDb --authentication-method ActiveDirectoryDefa
 az login --tenant <external-tenant-id> --allow-no-subscriptions
 ./infra/scripts/bootstrap-portal-app.ps1 -Environment dev -PortalUrl https://<portal_app_name>.azurewebsites.net
 
-# c. Let the portal read Business Central (staff tenant), so blocked vendors are refused
+# c. Let the portal check Business Central (staff tenant), so blocked vendors are refused.
+#    It uses the same read-only connector as the workbench.
 az login
 ./infra/scripts/bootstrap-bc-connector.ps1 -Environment dev
 ```
@@ -103,6 +107,11 @@ Re-run `bootstrap-entra-app.ps1` once. This adds the `Vim.Procurement` role to t
 4. Check the results:
    - The home page shows the vendor's name.
    - The workbench **Vendors → Portal access** page lists the user and the "Accepted" event.
+
+## If a vendor cannot sign in
+
+- **"The sign-in token has no email address":** the `email` optional claim is missing. Re-run `bootstrap-portal-app.ps1`.
+- **"Sign in with your email address and one-time passcode":** the person used a social or other identity provider. Remove that provider from the user flow.
 
 ## Routine checks
 

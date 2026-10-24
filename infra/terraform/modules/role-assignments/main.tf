@@ -9,10 +9,12 @@
 #   web + func      Storage Blob Data Contributor     documents storage account
 #   web + func      Cognitive Services User           Document Intelligence
 #   web + func      Key Vault Secrets User            Key Vault (read secrets)
-#   portal          Storage Blob Data Contributor     documents storage account
 #   func            Storage Blob Data Owner           Functions host storage
 #   func            Storage Queue Data Contributor    Functions host storage
 #   func            Storage Table Data Contributor    Functions host storage
+#
+# The vendor portal gets NO Azure role in phase 1: it touches only its own SQL
+# tables (create-portal-sql-user.sql). Phase 2 adds upload access deliberately.
 #
 # Microsoft Graph mailbox access for the function app is NOT granted here --
 # see infra/scripts/grant-mailbox-access.ps1 and the note in
@@ -122,15 +124,4 @@ resource "azurerm_role_assignment" "this" {
   # Managed identities are service principals. Stating this avoids a Graph
   # lookup that can fail while a brand-new identity is still replicating.
   principal_type = "ServicePrincipal"
-}
-
-# The vendor portal needs only the documents account (its health check now; vendor
-# uploads in phase 2). No Document Intelligence and no Key Vault.
-resource "azurerm_role_assignment" "portal_documents_blob" {
-  count = var.portal_enabled ? 1 : 0
-
-  scope                = var.documents_storage_account_id
-  role_definition_name = "Storage Blob Data Contributor"
-  principal_id         = var.portal_principal_id
-  principal_type       = "ServicePrincipal"
 }

@@ -262,17 +262,9 @@ resource "azurerm_linux_web_app" "portal" {
 
   app_settings = local.portal_app_settings
 
-  logs {
-    detailed_error_messages = true
-    failed_request_tracing  = true
-
-    http_logs {
-      file_system {
-        retention_in_days = 7
-        retention_in_mb   = 35
-      }
-    }
-  }
+  # No HTTP logs or failed-request tracing: their URLs would record one-time
+  # invitation links (/invite/<token>). Application logs still flow to Log
+  # Analytics through the diagnostic setting below.
 
   tags = var.tags
 }
@@ -363,8 +355,17 @@ resource "azurerm_monitor_diagnostic_setting" "portal" {
   target_resource_id         = azurerm_linux_web_app.portal[0].id
   log_analytics_workspace_id = var.log_analytics_workspace_id
 
+  # Not "allLogs": AppServiceHTTPLogs would carry invitation links in the URL.
   enabled_log {
-    category_group = "allLogs"
+    category = "AppServiceConsoleLogs"
+  }
+
+  enabled_log {
+    category = "AppServiceAppLogs"
+  }
+
+  enabled_log {
+    category = "AppServicePlatformLogs"
   }
 
   enabled_metric {

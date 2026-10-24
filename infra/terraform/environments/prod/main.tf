@@ -300,6 +300,4 @@ module "role_assignments" {
   docintel_account_id            = module.docintel.id
   key_vault_id                   = module.keyvault.id
   host_storage_account_id        = module.app_hosting.host_storage_account_id
-  portal_enabled                 = var.vendor_portal_enabled
-  portal_principal_id            = module.app_hosting.portal_principal_id
 }
