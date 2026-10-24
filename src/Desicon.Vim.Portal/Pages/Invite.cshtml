@@ -1,0 +1,32 @@
+@page "/invite/{token}"
+@model InviteModel
+@{
+    ViewData["Title"] = "Invitation";
+}
+@if (Model.Outcome is { } outcome)
+{
+    <h1>@(outcome.Access == PortalAccess.Allowed ? "You're in" : "We couldn't link your sign-in")</h1>
+    <section class="card @(outcome.Access == PortalAccess.Allowed ? "ok" : "warn")">
+        <p>@outcome.Message</p>
+        @if (outcome.Access == PortalAccess.Allowed) { <p><a class="button" href="/">Go to the portal</a></p> }
+    </section>
+}
+else if (Model.Preview is not { Usable: true } preview)
+{
+    <h1>Invitation not valid</h1>
+    <section class="card warn">
+        <p>This invitation link has expired, was withdrawn, or has already been used. Please ask Desicon Procurement for a new invitation.</p>
+    </section>
+}
+else
+{
+    <h1>Join the Desicon vendor portal</h1>
+    <section class="card">
+        <p>Desicon Procurement invited <strong>@preview.Email</strong> to use the portal for <strong>@preview.VendorName</strong> (@preview.VendorNo).</p>
+        <p>You are signed in as <strong>@Model.SignedInEmail</strong>. Your sign-in will be linked to this vendor only.</p>
+        <form method="post">
+            <button type="submit" class="button">Accept and link my sign-in</button>
+        </form>
+        <p class="muted">Signed in with a different email? <a href="/MicrosoftIdentity/Account/SignOut">Sign out</a> and open the link again.</p>
+    </section>
+}

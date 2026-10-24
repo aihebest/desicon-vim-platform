@@ -150,6 +150,18 @@ public sealed class VendorAccessService(
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 
+    /// <summary>What the invitation page shows before the person confirms (read-only; changes nothing).</summary>
+    public async Task<InvitationPreview?> PreviewInvitationAsync(string token, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+        {
+            return null;
+        }
+
+        var invitation = await access.GetInvitationByTokenHashAsync(VendorInvitation.HashToken(token.Trim()), ct).ConfigureAwait(false);
+        return invitation is null ? null : new InvitationPreview(invitation.VendorName, invitation.VendorNo, invitation.Email, invitation.IsUsable(clock.UtcNow), invitation.ExpiresAtUtc);
+    }
+
     /// <summary>
     /// The person opened their invitation link and signed in. Binds the login to the vendor
     /// if the invitation is valid, the sign-in email is the invited one and the vendor is
@@ -278,3 +290,5 @@ public sealed record VendorAccessOverview(
     IReadOnlyList<VendorAccessEvent> RecentEvents,
     DateTimeOffset NowUtc,
     int DormantDays);
+
+public sealed record InvitationPreview(string VendorName, string VendorNo, string Email, bool Usable, DateTimeOffset ExpiresAtUtc);

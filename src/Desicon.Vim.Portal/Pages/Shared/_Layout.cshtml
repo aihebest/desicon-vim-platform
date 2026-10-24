@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] · Desicon Vendor Portal</title>
+    <link rel="stylesheet" href="~/portal.css" asp-append-version="true" />
+</head>
+<body>
+    <header class="bar">
+        <div class="brand"><span class="mark">D</span><div><strong>Desicon</strong><small>Vendor Portal</small></div></div>
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <nav class="who">
+                <span>@(User.FindFirst("email")?.Value ?? User.Identity?.Name)</span>
+                <a href="/MicrosoftIdentity/Account/SignOut">Sign out</a>
+            </nav>
+        }
+    </header>
+    <main class="page">
+        @RenderBody()
+    </main>
+    <footer class="foot">
+        Desicon Engineering Limited. Desicon pays only into the bank account held on your vendor record and never asks for passwords or bank details by email.
+    </footer>
+</body>
+</html>

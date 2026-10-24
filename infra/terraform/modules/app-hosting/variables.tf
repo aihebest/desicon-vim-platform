@@ -163,3 +163,28 @@ variable "function_schedules" {
   })
   default = {}
 }
+
+variable "vendor_portal" {
+  description = <<-EOT
+    The vendor portal app (Desicon.Vim.Portal) on the same plan, signing vendors in with
+    Microsoft Entra External ID. Off until the External ID tenant and its app registration
+    exist (docs/operations/vendor-portal.md). authority is https://<subdomain>.ciamlogin.com/.
+  EOT
+  type = object({
+    enabled   = optional(bool, false)
+    app_name  = optional(string, "")
+    authority = optional(string, "")
+    client_id = optional(string, "")
+  })
+  default = {}
+
+  validation {
+    condition = !var.vendor_portal.enabled || (
+      trimspace(var.vendor_portal.app_name) != "" &&
+      can(regex("^https://[a-z0-9-]+\\.ciamlogin\\.com/$", var.vendor_portal.authority)) &&
+      can(regex("^[0-9a-fA-F-]{36}$", var.vendor_portal.client_id))
+    )
+
+    error_message = "When the vendor portal is enabled, set app_name, authority (https://<subdomain>.ciamlogin.com/) and client_id (a GUID)."
+  }
+}
