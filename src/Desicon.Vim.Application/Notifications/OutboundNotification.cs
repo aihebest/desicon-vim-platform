@@ -32,6 +32,9 @@ public static class NotificationTemplates
     private static string Footer =>
         "<p style=\"color:#666;font-size:12px\">Desicon Engineering Limited — Accounts Payable. This is an automated message from the Vendor Invoice Management Platform. Please quote the reference in any reply.</p>";
 
+    private static string PortalFooter =>
+        "<p style=\"color:#666;font-size:12px\">Desicon Engineering Limited — Procurement. This is an automated message from the Desicon vendor portal.</p>";
+
     public static OutboundNotification Acknowledgement(InvoiceCase c, string to) => new(
         c.Id, nameof(Acknowledgement), NotificationChannel.Email, to,
         $"Received: {c.Reference} — invoice {c.InvoiceNumber}",
@@ -90,8 +93,10 @@ public static class NotificationTemplates
         $"Invitation: Desicon vendor portal for {invitation.VendorName}",
         $"<p>Dear {E(invitation.VendorName)} team,</p><p>Desicon Engineering invites you to submit and track your invoices on the Desicon vendor portal, for vendor account <strong>{E(invitation.VendorNo)}</strong>.</p>" +
         $"<p><a href=\"{E(link)}\">Accept the invitation</a></p>" +
-        $"<p>Sign in with <strong>this email address ({E(invitation.Email)})</strong>; you will receive a one-time code to confirm it. The link works once and expires on {Wat(invitation.ExpiresAtUtc)}.</p>" +
-        "<p>If you did not expect this invitation, ignore this email and tell Desicon Procurement. Desicon will never ask for passwords or bank details by email.</p>" + Footer);
+        $"<p>Sign in with <strong>this email address ({E(invitation.Email)})</strong>; you will receive a one-time code to confirm it. " +
+        "<strong>First time?</strong> On the sign-in page choose <em>No account? Create one</em> and use this same address. There is no password.</p>" +
+        $"<p>The link works once and expires on {Wat(invitation.ExpiresAtUtc)}.</p>" +
+        "<p>If you did not expect this invitation, ignore this email and tell Desicon Procurement. Desicon will never ask for passwords or bank details by email.</p>" + PortalFooter);
 
     public static OutboundNotification PortalCallBackInvitationNotice(VendorInvitation invitation, string invitedBy, string financeManagerEmail, string workbenchUrl) => new(
         Guid.Empty, nameof(PortalCallBackInvitationNotice), NotificationChannel.Email, financeManagerEmail,
