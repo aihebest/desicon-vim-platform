@@ -12,7 +12,11 @@ namespace Desicon.Vim.Web.Security;
 /// </summary>
 public static class Policies
 {
+    /// <summary>Reads invoice cases and their documents: every staff role except Procurement.</summary>
     public const string AnyVimUser = nameof(AnyVimUser);
+
+    /// <summary>Holds any workbench role (including Procurement). The site-wide default.</summary>
+    public const string StaffUser = nameof(StaffUser);
     public const string DocumentController = nameof(DocumentController);
     public const string Reviewer = nameof(Reviewer);
     public const string AccountsPayable = nameof(AccountsPayable);
@@ -36,6 +40,8 @@ public static class Policies
             .Where(r => r is not VimRole.System and not VimRole.Vendor and not VimRole.Procurement)
             .Select(RoleName).ToArray();
         options.AddPolicy(AnyVimUser, p => p.RequireAuthenticatedUser().RequireRole(caseReaders));
+        var staff = Enum.GetValues<VimRole>().Where(r => r is not VimRole.System and not VimRole.Vendor).Select(RoleName).ToArray();
+        options.AddPolicy(StaffUser, p => p.RequireAuthenticatedUser().RequireRole(staff));
         options.AddPolicy(DocumentController, p => p.RequireRole(RoleName(VimRole.DocumentController)));
         options.AddPolicy(Reviewer, p => p.RequireRole(RoleName(VimRole.Reviewer)));
         options.AddPolicy(AccountsPayable, p => p.RequireRole(RoleName(VimRole.AccountsPayable)));
@@ -44,8 +50,11 @@ public static class Policies
         options.AddPolicy(Procurement, p => p.RequireRole(RoleName(VimRole.Procurement)));
         options.AddPolicy(VendorAccessReview, p => p.RequireRole(RoleName(VimRole.Procurement), RoleName(VimRole.FinanceManager)));
 
-        // Deny by default: every page needs a Vim role unless it opts out.
-        options.FallbackPolicy = options.GetPolicy(AnyVimUser);
+        // Deny by default: every endpoint needs a workbench role unless it opts out. This must
+        // include Procurement, because the interactive connection (/_blazor) that makes every
+        // button work falls under it. Case pages and document downloads require AnyVimUser
+        // explicitly, so Procurement still cannot read invoices.
+        options.FallbackPolicy = options.GetPolicy(StaffUser);
         return options;
     }
 }
