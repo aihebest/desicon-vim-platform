@@ -13,9 +13,8 @@
 #   func            Storage Queue Data Contributor    Functions host storage
 #   func            Storage Table Data Contributor    Functions host storage
 #
-# The vendor portal gets one narrow custom role: add NEW files to the documents
-# container (vendor uploads). It cannot read, list, overwrite or delete any file,
-# so a portal bug can never expose another vendor's documents.
+# The vendor portal gets Storage Blob Data Contributor on the documents
+# CONTAINER only (vendor uploads); see portal_documents_blob below.
 #
 # Microsoft Graph mailbox access for the function app is NOT granted here --
 # see infra/scripts/grant-mailbox-access.ps1 and the note in
@@ -127,28 +126,17 @@ resource "azurerm_role_assignment" "this" {
   principal_type = "ServicePrincipal"
 }
 
-resource "azurerm_role_definition" "portal_blob_uploader" {
+# Built-in role, scoped to the documents CONTAINER (not the account). A custom
+# create-only role would be tighter, but the deploy identity may neither define
+# roles nor assign custom ones (bootstrap-github-oidc.ps1), so it would need a
+# manual Owner step in every environment. No portal code path reads, lists or
+# deletes stored files, and blob versioning + soft delete keep any deleted file
+# recoverable.
+resource "azurerm_role_assignment" "portal_documents_blob" {
   count = var.portal_enabled ? 1 : 0
 
-  name        = "VIM Vendor Upload (${var.documents_storage_account_name})"
-  scope       = var.documents_storage_account_id
-  description = "Create new blobs only (vendor portal uploads). No read, list or delete."
-
-  permissions {
-    data_actions = [
-      "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
-      "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
-    ]
-  }
-
-  assignable_scopes = [var.documents_storage_account_id]
-}
-
-resource "azurerm_role_assignment" "portal_blob_uploader" {
-  count = var.portal_enabled ? 1 : 0
-
-  scope              = "${var.documents_storage_account_id}/blobServices/default/containers/${var.documents_container_name}"
-  role_definition_id = azurerm_role_definition.portal_blob_uploader[0].role_definition_resource_id
-  principal_id       = var.portal_principal_id
-  principal_type     = "ServicePrincipal"
+  scope                = "${var.documents_storage_account_id}/blobServices/default/containers/${var.documents_container_name}"
+  role_definition_name = "Storage Blob Data Contributor"
+  principal_id         = var.portal_principal_id
+  principal_type       = "ServicePrincipal"
 }

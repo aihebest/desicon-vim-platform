@@ -53,7 +53,7 @@ What the portal can and cannot touch:
 | | Can | Cannot |
 |---|---|---|
 | Invoices | Its own vendor's cases only (the vendor number comes from the login, never the form; another vendor's case shows "not found") | See reviewers, internal notes, checklist answers or other vendors |
-| Documents | Add new PDFs (custom role *VIM Vendor Upload*: create only) | Read, list, overwrite or delete any stored file |
+| Documents | Upload new PDFs (Storage Blob Data Contributor on the documents container only; no portal code reads, lists or deletes files; versioning and soft delete keep files recoverable) | Touch any other container or storage account |
 | Database | Its own role `vim_portal` (see `create-portal-sql-user.sql`) | Read the outbox or routes, change audit history, change the schema |
 
 After deploying phase 2, **re-run `create-portal-sql-user.sql`** (same command as step 5a below) to grant the submission permissions.
