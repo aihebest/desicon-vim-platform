@@ -1,14 +1,51 @@
 @page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home";
+    ViewData["Title"] = "My invoices";
 }
 @if (Model.Result.Access == PortalAccess.Allowed && Model.Result.User is { } u)
 {
-    <h1>Welcome, @u.VendorName</h1>
+    <div class="title-row">
+        <h1>@u.VendorName</h1>
+        <a class="button" href="/submit">Submit an invoice</a>
+    </div>
+    <p class="muted">Signed in as <strong>@u.Email</strong> for vendor account <strong>@u.VendorNo</strong>.
+        Your credit period counts from the date Desicon Accounts <strong>accepts</strong> an invoice.</p>
+
+    @if (Model.Invoices.Any(i => i.NeedsAction))
+    {
+        <section class="card warn">
+            <p><strong>@Model.Invoices.Count(i => i.NeedsAction) invoice(s) need a correction.</strong> Open them below to see why and resubmit.</p>
+        </section>
+    }
+
     <section class="card">
-        <p>You are signed in as <strong>@u.Email</strong> for vendor account <strong>@u.VendorNo</strong>.</p>
-        <p class="muted">Invoice submission and tracking open here soon. Until then, please continue to send invoices as agreed with Desicon Accounts Payable.</p>
+        <h2>My invoices</h2>
+        @if (Model.Invoices.Count == 0)
+        {
+            <p class="muted">You have not submitted any invoices on the portal yet.</p>
+        }
+        else
+        {
+            <div class="table-wrap">
+                <table class="grid">
+                    <thead><tr><th>Reference</th><th>Invoice no.</th><th>PO / SO</th><th class="num">Amount</th><th>Submitted</th><th>Status</th></tr></thead>
+                    <tbody>
+                        @foreach (var i in Model.Invoices)
+                        {
+                            <tr class="@(i.NeedsAction ? "attention" : "")">
+                                <td><a href="/invoices/@i.Id">@i.Reference</a></td>
+                                <td>@i.InvoiceNumber</td>
+                                <td>@i.OrderNumber</td>
+                                <td class="num">@i.Currency @i.Amount?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)</td>
+                                <td>@Fmt.Wat(i.SubmittedAtUtc)</td>
+                                <td>@i.StatusText@(i.AcceptedAtUtc is { } a ? $" on {Fmt.Day(a)}" : "")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
     </section>
 }
 else

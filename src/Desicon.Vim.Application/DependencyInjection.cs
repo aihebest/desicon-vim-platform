@@ -31,6 +31,7 @@ public static class DependencyInjection
         services.AddScoped<SubmissionService>();
         services.AddScoped<SubmissionProcessor>();
         services.AddScoped<VendorAccessService>();
+        services.AddScoped<VendorPortal.VendorPortalService>();
         return services;
     }
 }

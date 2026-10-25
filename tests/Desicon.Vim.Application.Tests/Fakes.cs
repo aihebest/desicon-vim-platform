@@ -50,6 +50,9 @@ internal sealed class InMemoryStore : ICaseRepository, IRouteRepository, IInboun
     public Task<IReadOnlyList<InvoiceCase>> GetWithPendingScansAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Documents.Any(d => d.ScanStatus == ScanStatus.Pending)).ToList());
 
+    public Task<IReadOnlyList<InvoiceCase>> ListForVendorAsync(string vendorNo, int take, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.VendorNo == vendorNo).OrderByDescending(c => c.ReceivedAtUtc).Take(take).ToList());
+
     public Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<InvoiceCase>>(Cases.Where(c => c.Status == CaseStatus.Received && c.Channel is SubmissionChannel.Portal or SubmissionChannel.Assisted).ToList());
 

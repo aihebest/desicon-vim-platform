@@ -1,7 +1,7 @@
 # Vendor portal: setup and operation
 
 The vendor portal (`src/Desicon.Vim.Portal`) is a separate web app where vendors sign in.
-Phase 1 is **sign-in and invitations only**. Vendors cannot submit invoices yet.
+Vendors sign in (phase 1), then submit invoices with the agreed documents, follow their status and correct returned invoices (phase 2).
 
 | | Workbench (staff) | Vendor portal |
 |---|---|---|
@@ -30,6 +30,33 @@ Phase 1 is **sign-in and invitations only**. Vendors cannot submit invoices yet.
 Every step is written to `VendorAccessEvents`. The running apps can only add rows to that table; they cannot change or delete them.
 
 Anyone can create an External ID account through the sign-up page. Without an accepted invitation, the account reaches nothing: the portal shows "Access needed".
+
+## What a vendor can do (phase 2)
+
+- **Submit an invoice.**
+  1. Choose *Materials (PO)* or *Services (SO)*.
+  2. Type the invoice details.
+  3. Upload one PDF per document slot, from the agreed list in `RequiredDocuments`:
+     - **Materials:** invoice, waybill or delivery note, signed GRV, PO.
+     - **Services:** invoice, signed Work Completion Certificate or TRV, Service Order.
+     - Optional extras either way.
+  4. Before anything is recorded, the same checks as Accounts Payable's assisted submission run: all slots filled, real PDFs, the PO is the vendor's and released, the amount equals the received-not-invoiced value, and the invoice is not a duplicate.
+  5. The vendor gets a reference and an acknowledgement email at their login address.
+- **Track invoices.** **My invoices** lists every invoice for their vendor account with a plain-words status. The page reminds vendors that **credit days count from acceptance**.
+- **Correct a returned invoice.**
+  1. The invoice page shows *why* it was returned.
+  2. The vendor uploads only the corrected documents and/or fixes the details.
+  3. It keeps the same reference, and the automatic checks run again.
+
+What the portal can and cannot touch:
+
+| | Can | Cannot |
+|---|---|---|
+| Invoices | Its own vendor's cases only (the vendor number comes from the login, never the form; another vendor's case shows "not found") | See reviewers, internal notes, checklist answers or other vendors |
+| Documents | Add new PDFs (custom role *VIM Vendor Upload*: create only) | Read, list, overwrite or delete any stored file |
+| Database | Its own role `vim_portal` (see `create-portal-sql-user.sql`) | Read the outbox or routes, change audit history, change the schema |
+
+After deploying phase 2, **re-run `create-portal-sql-user.sql`** (same command as step 5a below) to grant the submission permissions.
 
 ## Cost
 

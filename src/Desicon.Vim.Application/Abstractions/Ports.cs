@@ -38,6 +38,9 @@ public interface ICaseRepository
     /// <summary>Portal / assisted submissions waiting for their automatic checks (status Received).</summary>
     Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct);
 
+    /// <summary>One vendor's cases, newest first (vendor portal list). Never other vendors'.</summary>
+    Task<IReadOnlyList<InvoiceCase>> ListForVendorAsync(string vendorNo, int take, CancellationToken ct);
+
     /// <summary>
     /// Other cases already claiming value on this PO / SO that Business Central does not
     /// yet show as invoiced (submitted, with the FM or Accounts, or accepted).

@@ -65,6 +65,18 @@ public sealed class EfCaseRepository(VimDbContext db) : ICaseRepository
             .ToListAsync(ct)
             .ConfigureAwait(false);
 
+    public async Task<IReadOnlyList<InvoiceCase>> ListForVendorAsync(string vendorNo, int take, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(vendorNo);
+        var number = vendorNo.Trim().ToUpperInvariant();
+        return await db.Cases.AsNoTracking()
+            .Where(c => c.VendorNo == number)
+            .OrderByDescending(c => c.ReceivedAtUtc)
+            .Take(Math.Clamp(take, 1, 500))
+            .ToListAsync(ct)
+            .ConfigureAwait(false);
+    }
+
     public async Task<IReadOnlyList<InvoiceCase>> GetAwaitingChecksAsync(CancellationToken ct) =>
         await WithChildren()
             .Where(c => c.Status == CaseStatus.Received

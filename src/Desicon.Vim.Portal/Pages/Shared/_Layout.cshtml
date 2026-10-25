@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] · Desicon Vendor Portal</title>
     <link rel="stylesheet" href="~/portal.css" asp-append-version="true" />
+    <script src="~/portal.js" asp-append-version="true" defer></script>
 </head>
 <body>
     <header class="bar">
@@ -12,6 +13,8 @@
         @if (User.Identity?.IsAuthenticated == true)
         {
             <nav class="who">
+                <a href="/">My invoices</a>
+                <a href="/submit">Submit an invoice</a>
                 <span>@(User.FindFirst("email")?.Value ?? User.Identity?.Name)</span>
                 <a href="/MicrosoftIdentity/Account/SignOut">Sign out</a>
             </nav>
