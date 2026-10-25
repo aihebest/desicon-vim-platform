@@ -30,9 +30,10 @@ public static class PortalClaims
         // sign-in (Google, a partner's IdP, ...) carries an "idp" claim naming another issuer and
         // its email may never have been verified by us, so it is refused.
         var idp = user.FindFirstValue("idp") ?? user.FindFirstValue("http://schemas.microsoft.com/identity/claims/identityprovider");
-        if (idp is not null && !idp.Contains(tid, StringComparison.OrdinalIgnoreCase))
+        if (!IsOwnEmailAccount(idp, tid))
         {
-            throw new UnauthorizedAccessException("Sign in with your email address and one-time passcode.");
+            throw new UnauthorizedAccessException(
+                $"Sign in with your email address and one-time passcode (this sign-in came from '{idp}').");
         }
 
         // The "email" claim only (optional claim on the app registration). Never
@@ -40,6 +41,26 @@ public static class PortalClaims
         var email = user.FindFirstValue("email") ?? user.FindFirstValue(ClaimTypes.Email)
             ?? throw new UnauthorizedAccessException("The sign-in token has no email address.");
         return new PortalSignIn($"{tid}:{oid}", email);
+    }
+
+    /// <summary>
+    /// True for the External ID tenant's own email accounts. External ID marks these with no
+    /// "idp" claim, with its own tenant/issuer, or with a generic email marker ("mail").
+    /// Anything else (google.com, facebook.com, another directory's issuer) is federated.
+    /// </summary>
+    public static bool IsOwnEmailAccount(string? idp, string tenantId)
+    {
+        if (string.IsNullOrWhiteSpace(idp))
+        {
+            return true;
+        }
+
+        var value = idp.Trim();
+        return value.Contains(tenantId, StringComparison.OrdinalIgnoreCase)
+            || value.Contains(".ciamlogin.com", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("mail", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("email", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("localaccount", StringComparison.OrdinalIgnoreCase);
     }
 }
 
