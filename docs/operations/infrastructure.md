@@ -254,7 +254,7 @@ Push to `main` (or **Actions → Deploy → Run workflow**, `stop_after = dev`).
 
 ### 4.11 uat and prod
 
-For each: repeat 4.2 (env-named groups), 4.3, 4.4, then **Actions → Deploy → Run workflow** with `infra_only = true` and `stop_after` = that environment (creates the infrastructure only), then 4.6 – 4.10.
+Follow **[uat-rollout.md](uat-rollout.md)**, the ordered runbook for UAT with the prod checklist. The first Terraform apply of each new environment must run from your PC as Owner (it creates the custom scan-result role, which the pipeline identity may not create); after that the pipeline handles everything.
 
 **prod specifics**
 
