@@ -206,9 +206,15 @@ resource "azurerm_linux_web_app" "web" {
 
   # Written to the app's own file system (/home/LogFiles) for troubleshooting.
   # Never shown to users; the app's error page is controlled by the code.
+  # application_logs: the app's own log lines (also enabled from the portal's
+  # "App Service logs" blade; declared here so plans stay clean).
   logs {
     detailed_error_messages = true
     failed_request_tracing  = true
+
+    application_logs {
+      file_system_level = "Information"
+    }
 
     http_logs {
       file_system {
