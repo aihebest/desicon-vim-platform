@@ -1,0 +1,36 @@
+@using Desicon.Vim.Domain.Cases
+@using Desicon.Vim.Portal.Security
+@model InvoiceFieldsModel
+@* Invoice details and one upload per document slot (PDF only). Server-side rules decide; nothing here is trusted. *@
+<div class="form-grid">
+    <label>Invoice number<input name="Input.InvoiceNumber" value="@Model.Input.InvoiceNumber" maxlength="60" required autocomplete="off" /></label>
+    <label>Invoice date<input name="Input.InvoiceDate" type="date" value="@Fmt.Iso(Model.Input.InvoiceDate)" required /></label>
+    <label>Amount (including VAT)<input name="Input.Amount" type="number" step="0.01" min="0.01" value="@Fmt.Money(Model.Input.Amount)" required inputmode="decimal" /></label>
+    <label>Currency<input name="Input.Currency" value="@Model.Input.Currency" maxlength="3" minlength="3" required /></label>
+    <label>@(Model.Supply == SupplyType.Services ? "Service Order (SO) number" : "Purchase Order (PO) number")<input name="Input.OrderNumber" value="@Model.Input.OrderNumber" maxlength="40" required autocomplete="off" /></label>
+    <label>@(Model.Supply == SupplyType.Services ? "Work completed on" : "Delivered on")<input name="Input.DeliveredOn" type="date" value="@Fmt.Iso(Model.Input.DeliveredOn)" required /></label>
+</div>
+
+<h3>Documents <span class="muted">(PDF only, up to @Model.MaxMegabytes MB each)</span></h3>
+@if (!Model.RequireAll)
+{
+    <p class="muted">Upload only the documents you are correcting. The others stay as they are.</p>
+}
+<ul class="slots">
+    @foreach (var kind in RequiredDocuments.For(Model.Supply))
+    {
+        <li>
+            <label>@RequiredDocuments.Label(kind) @if (Model.RequireAll) { <span class="req">required</span> }
+                <input type="file" name="@VendorPageModel.SlotName(kind)" accept="application/pdf,.pdf" required="@Model.RequireAll" />
+            </label>
+        </li>
+    }
+    @foreach (var kind in RequiredDocuments.Optional(Model.Supply))
+    {
+        <li>
+            <label>@RequiredDocuments.Label(kind) <span class="muted">optional</span>
+                <input type="file" name="@VendorPageModel.SlotName(kind)" accept="application/pdf,.pdf" />
+            </label>
+        </li>
+    }
+</ul>

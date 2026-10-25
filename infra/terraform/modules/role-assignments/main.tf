@@ -13,8 +13,9 @@
 #   func            Storage Queue Data Contributor    Functions host storage
 #   func            Storage Table Data Contributor    Functions host storage
 #
-# The vendor portal gets NO Azure role in phase 1: it touches only its own SQL
-# tables (create-portal-sql-user.sql). Phase 2 adds upload access deliberately.
+# The vendor portal gets one narrow custom role: add NEW files to the documents
+# container (vendor uploads). It cannot read, list, overwrite or delete any file,
+# so a portal bug can never expose another vendor's documents.
 #
 # Microsoft Graph mailbox access for the function app is NOT granted here --
 # see infra/scripts/grant-mailbox-access.ps1 and the note in
@@ -124,4 +125,30 @@ resource "azurerm_role_assignment" "this" {
   # Managed identities are service principals. Stating this avoids a Graph
   # lookup that can fail while a brand-new identity is still replicating.
   principal_type = "ServicePrincipal"
+}
+
+resource "azurerm_role_definition" "portal_blob_uploader" {
+  count = var.portal_enabled ? 1 : 0
+
+  name        = "VIM Vendor Upload (${var.documents_storage_account_name})"
+  scope       = var.documents_storage_account_id
+  description = "Create new blobs only (vendor portal uploads). No read, list or delete."
+
+  permissions {
+    data_actions = [
+      "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/write",
+      "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/add/action",
+    ]
+  }
+
+  assignable_scopes = [var.documents_storage_account_id]
+}
+
+resource "azurerm_role_assignment" "portal_blob_uploader" {
+  count = var.portal_enabled ? 1 : 0
+
+  scope              = "${var.documents_storage_account_id}/blobServices/default/containers/${var.documents_container_name}"
+  role_definition_id = azurerm_role_definition.portal_blob_uploader[0].role_definition_resource_id
+  principal_id       = var.portal_principal_id
+  principal_type     = "ServicePrincipal"
 }

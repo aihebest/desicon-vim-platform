@@ -1,0 +1,44 @@
+@page "/submit"
+@using Desicon.Vim.Domain.Cases
+@model SubmitModel
+@{
+    ViewData["Title"] = "Submit an invoice";
+}
+<p><a href="/">&larr; My invoices</a></p>
+<h1>Submit an invoice</h1>
+
+@if (Model.Supply is not (SupplyType.Materials or SupplyType.Services))
+{
+    <section class="card">
+        <h2>What is this invoice for?</h2>
+        <p class="muted">The documents you need depend on what you supplied.</p>
+        <div class="choices">
+            <a class="choice" href="/submit?supply=Materials">
+                <strong>Materials (Purchase Order)</strong>
+                <span>Invoice, waybill or delivery note, signed Goods Received Voucher (GRV) and the PO.</span>
+            </a>
+            <a class="choice" href="/submit?supply=Services">
+                <strong>Services (Service Order)</strong>
+                <span>Invoice, signed Work Completion Certificate or TRV and the Service Order.</span>
+            </a>
+        </div>
+    </section>
+}
+else
+{
+    <p class="muted">For <strong>@Model.VendorName</strong>: @(Model.Supply == SupplyType.Services ? "services (Service Order)" : "materials (Purchase Order)"). <a href="/submit">Change</a></p>
+    @if (Model.Problems.Count > 0)
+    {
+        <section class="card warn" role="alert">
+            <p><strong>Please fix the following, then submit again.</strong> For your security, choose the files again.</p>
+            <ul>@foreach (var p in Model.Problems) { <li>@p</li> }</ul>
+        </section>
+    }
+    <form method="post" enctype="multipart/form-data" class="card">
+        <input type="hidden" name="Supply" value="@Model.Supply" />
+        <partial name="_InvoiceFields" model="Model.Fields" />
+        <p class="muted">Before Desicon records your invoice, it is checked against your Purchase/Service Order and the goods or services received in our system.
+            The amount must match the value received that has not been invoiced yet.</p>
+        <button type="submit" class="button">Submit invoice</button>
+    </form>
+}

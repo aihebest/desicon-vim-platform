@@ -8,10 +8,16 @@
  Safe to run more than once.
 
  The portal is internet-facing, so it gets its OWN role, vim_portal, with only
- what phase 1 needs: read/write vendor invitations and portal users, and
- INSERT (not UPDATE/DELETE) on the vendor access log. It cannot read cases,
- documents, routes or the outbox, and has no DDL rights. Phase 2 (vendor
- submission) will widen this deliberately, table by table.
+ what vendors need:
+   - portal access:   read/write invitations and portal users; INSERT-only
+                      vendor access log
+   - submit/resubmit: create and update invoice cases, add documents, resolve
+                      the system's own flags on resubmission, take the next
+                      case reference number, add audit events (INSERT-only)
+                      and queue acknowledgement emails (INSERT-only)
+ It cannot read the outbox or routes, cannot change or delete audit history,
+ and has no DDL rights. Re-run this script after each release that adds tables
+ the portal uses.
 
  HOW TO RUN IT (PowerShell)
    az login
@@ -44,6 +50,17 @@ GRANT SELECT, INSERT, UPDATE ON [vim].[VendorInvitations] TO [vim_portal];
 GRANT SELECT, INSERT, UPDATE ON [vim].[VendorUsers] TO [vim_portal];
 GRANT SELECT, INSERT ON [vim].[VendorAccessEvents] TO [vim_portal];
 DENY UPDATE, DELETE ON [vim].[VendorAccessEvents] TO [vim_portal];
+
+-- Phase 2: vendor submission and resubmission
+GRANT SELECT, INSERT, UPDATE ON [vim].[Cases] TO [vim_portal];
+GRANT SELECT, INSERT ON [vim].[CaseDocuments] TO [vim_portal];
+GRANT SELECT, INSERT, UPDATE ON [vim].[CaseFlags] TO [vim_portal];
+GRANT SELECT ON [vim].[CaseChecklistAnswers] TO [vim_portal];
+GRANT SELECT, INSERT ON [vim].[AuditEvents] TO [vim_portal];
+DENY UPDATE, DELETE ON [vim].[AuditEvents] TO [vim_portal];
+GRANT INSERT ON [vim].[OutboxMessages] TO [vim_portal];
+GRANT UPDATE ON OBJECT::[vim].[CaseReferenceSeq] TO [vim_portal];
+PRINT 'Granted vendor submission permissions to vim_portal';
 
 IF NOT EXISTS (SELECT 1 FROM sys.database_principals WHERE name = N'$(PortalAppName)')
 BEGIN

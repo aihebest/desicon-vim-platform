@@ -1,0 +1,69 @@
+@page "/invoices/{id:guid}"
+@using Desicon.Vim.Domain.Cases
+@model InvoiceModel
+@{
+    ViewData["Title"] = Model.Detail.Summary.Reference;
+    var s = Model.Detail.Summary;
+}
+<p><a href="/">&larr; My invoices</a></p>
+@if (TempData["Notice"] is string notice)
+{
+    <section class="card ok" role="status"><p>@notice</p></section>
+}
+<div class="title-row">
+    <h1>@s.Reference</h1>
+    <span class="status @(s.NeedsAction ? "status-warn" : "")">@s.StatusText</span>
+</div>
+
+@if (Model.Detail.ReturnReason is { } reason)
+{
+    <section class="card warn">
+        <h2>Why it was returned</h2>
+        <p class="reason">@reason</p>
+        <p class="muted">Correct the details or upload the corrected documents below. It keeps the same reference. No credit days run while an invoice is with you.</p>
+    </section>
+}
+
+<section class="card">
+    <h2>Invoice</h2>
+    <dl class="facts">
+        <dt>Invoice number</dt><dd>@s.InvoiceNumber</dd>
+        <dt>Invoice date</dt><dd>@Fmt.Day(Model.Detail.InvoiceDate)</dd>
+        <dt>Amount</dt><dd>@s.Currency @s.Amount?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)</dd>
+        <dt>@(Model.Detail.SupplyType == SupplyType.Services ? "Service Order" : "Purchase Order")</dt><dd>@s.OrderNumber</dd>
+        <dt>@(Model.Detail.SupplyType == SupplyType.Services ? "Work completed on" : "Delivered on")</dt><dd>@Fmt.Day(Model.Detail.DeliveredOn)</dd>
+        <dt>Submitted</dt><dd>@Fmt.Wat(s.SubmittedAtUtc)@(Model.Detail.Round > 1 ? $" (corrected, round {Model.Detail.Round})" : "")</dd>
+        <dt>Accepted</dt><dd>@(s.AcceptedAtUtc is { } a ? Fmt.Day(a) + ". Your credit period counts from this date." : "Not yet")</dd>
+    </dl>
+</section>
+
+<section class="card">
+    <h2>Documents</h2>
+    <div class="table-wrap">
+        <table class="grid">
+            <thead><tr><th>Document</th><th>File</th><th>Uploaded</th><th>Virus check</th></tr></thead>
+            <tbody>
+                @foreach (var d in Model.Detail.Documents)
+                {
+                    <tr><td>@d.Label</td><td>@d.FileName</td><td>@Fmt.Wat(d.AddedAtUtc)</td><td>@d.ScanText</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</section>
+
+@if (Model.Detail.CanResubmit)
+{
+    <h2 id="correct">Correct and resubmit</h2>
+    @if (Model.Problems.Count > 0)
+    {
+        <section class="card warn" role="alert">
+            <p><strong>Please fix the following, then submit again.</strong> For your security, choose the files again.</p>
+            <ul>@foreach (var p in Model.Problems) { <li>@p</li> }</ul>
+        </section>
+    }
+    <form method="post" asp-page-handler="Resubmit" enctype="multipart/form-data" class="card">
+        <partial name="_InvoiceFields" model="Model.Fields" />
+        <button type="submit" class="button">Resubmit invoice</button>
+    </form>
+}
