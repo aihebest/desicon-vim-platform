@@ -29,7 +29,7 @@ public class VendorPortalServiceTests
     private SubmissionService Submissions() =>
         new(_store, _store, _store, _erp, new AutomaticChecks(_store, _erp, Opts.Default()), _store, _store, _clock, Opts.Default(), NullLogger<SubmissionService>.Instance);
 
-    private VendorPortalService Portal() => new(_store, Submissions());
+    private VendorPortalService Portal() => new(_store, Submissions(), _clock);
 
     private static VendorUser UserFor(string vendorNo, string vendorName, string email, string oid)
     {
@@ -115,5 +115,18 @@ public class VendorPortalServiceTests
         Assert.True(result.Succeeded, string.Join(" ", result.Problems));
         Assert.Equal(CaseStatus.Received, c.Status);
         Assert.Equal(2, c.SubmissionRound);
+    }
+
+    [Fact]
+    public async Task A_double_submit_returns_the_first_case_instead_of_creating_a_duplicate()
+    {
+        var abc = UserFor("V0001", "ABC Ltd", "accounts@abc.example", "tid:oid-1");
+
+        var first = await Portal().SubmitAsync(abc, Form(), AllSlots(), default);
+        var again = await Portal().SubmitAsync(abc, Form(), AllSlots(), default);
+
+        Assert.True(again.Succeeded);
+        Assert.Equal(first.CaseId, again.CaseId);
+        Assert.Single(_store.Cases);
     }
 }

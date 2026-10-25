@@ -54,7 +54,8 @@ DENY UPDATE, DELETE ON [vim].[VendorAccessEvents] TO [vim_portal];
 -- Phase 2: vendor submission and resubmission
 GRANT SELECT, INSERT, UPDATE ON [vim].[Cases] TO [vim_portal];
 GRANT SELECT, INSERT ON [vim].[CaseDocuments] TO [vim_portal];
-GRANT SELECT, INSERT, UPDATE ON [vim].[CaseFlags] TO [vim_portal];
+GRANT SELECT, UPDATE ON [vim].[CaseFlags] TO [vim_portal];
+REVOKE INSERT ON [vim].[CaseFlags] FROM [vim_portal];
 GRANT SELECT ON [vim].[CaseChecklistAnswers] TO [vim_portal];
 GRANT SELECT, INSERT ON [vim].[AuditEvents] TO [vim_portal];
 DENY UPDATE, DELETE ON [vim].[AuditEvents] TO [vim_portal];

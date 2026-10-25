@@ -13,14 +13,14 @@ namespace Desicon.Vim.Portal.Pages;
 [RequestFormLimits(MultipartBodyLengthLimit = VendorPageModel.MaxRequestBytes)]
 public sealed class InvoiceModel(VendorAccessService access, VendorPortalService portal, IOptions<VimOptions> options) : VendorPageModel(access)
 {
-    public VendorInvoiceDetail Detail { get; private set; } = default!;
+    public VendorInvoiceDetail? Detail { get; private set; }
 
     [BindProperty]
     public InvoiceForm Input { get; set; } = new();
 
     public IReadOnlyList<string> Problems { get; private set; } = [];
 
-    public InvoiceFieldsModel Fields => new(Input, Detail.SupplyType, RequireAll: false, options.Value.MaxAttachmentMegabytes);
+    public InvoiceFieldsModel Fields => new(Input, Detail?.SupplyType ?? SupplyType.Unknown, RequireAll: false, options.Value.MaxAttachmentMegabytes);
 
     public async Task<IActionResult> OnGetAsync(Guid id, CancellationToken ct)
     {
@@ -34,6 +34,9 @@ public sealed class InvoiceModel(VendorAccessService access, VendorPortalService
         Input = InvoiceForm.From(detail);
         return Page();
     }
+
+    /// <summary>A POST without the Resubmit handler (or any unknown handler) is not a page.</summary>
+    public IActionResult OnPost() => NotFound();
 
     public async Task<IActionResult> OnPostResubmitAsync(Guid id, CancellationToken ct)
     {

@@ -43,7 +43,7 @@ public abstract class VendorPageModel(VendorAccessService access) : PageModel
             var f = Request.Form.Files.GetFile(SlotName(kind));
             if (f is { Length: > 0 })
             {
-                files.Add(new SubmittedFile(kind, Path.GetFileName(f.FileName), f.ContentType, f.Length, _ => Task.FromResult(f.OpenReadStream())));
+                files.Add(new SubmittedFile(kind, CleanFileName(f.FileName), f.ContentType, f.Length, _ => Task.FromResult(f.OpenReadStream())));
             }
         }
 
@@ -51,6 +51,31 @@ public abstract class VendorPageModel(VendorAccessService access) : PageModel
     }
 
     public static string SlotName(DocumentKind kind) => "doc_" + kind;
+
+    /// <summary>
+    /// The browser decides the file name: keep only the last path segment (Windows or Unix
+    /// separators), drop control characters and cap the length so it fits the database.
+    /// </summary>
+    public static string CleanFileName(string? raw)
+    {
+        var name = (raw ?? string.Empty).Replace('\\', '/');
+        name = name[(name.LastIndexOf('/') + 1)..];
+        name = new string(name.Where(ch => !char.IsControl(ch)).ToArray()).Trim();
+        if (name.Length == 0)
+        {
+            return "document.pdf";
+        }
+
+        const int Max = 150;
+        if (name.Length > Max)
+        {
+            var ext = Path.GetExtension(name);
+            ext = ext.Length is > 0 and <= 10 ? ext : string.Empty;
+            name = name[..(Max - ext.Length)] + ext;
+        }
+
+        return name;
+    }
 
     /// <summary>Whole request limit: every slot at the per-file maximum, plus form fields.</summary>
     public const long MaxRequestBytes = 9L * 26 * 1024 * 1024;

@@ -2,6 +2,7 @@ using Desicon.Vim.Application.Abstractions;
 using Desicon.Vim.Application.Cases;
 using Desicon.Vim.Application.Submission;
 using Desicon.Vim.Domain.Cases;
+using Desicon.Vim.Domain.Integrity;
 using Desicon.Vim.Domain.VendorAccess;
 
 namespace Desicon.Vim.Application.VendorPortal;
@@ -55,7 +56,7 @@ public sealed record VendorSubmitResult(IReadOnlyList<string> Problems, Guid? Ca
 /// login's own vendor: the vendor number never comes from the browser, and another vendor's
 /// case behaves exactly like a case that does not exist.
 /// </summary>
-public sealed class VendorPortalService(ICaseRepository cases, SubmissionService submissions)
+public sealed class VendorPortalService(ICaseRepository cases, SubmissionService submissions, IClock clock)
 {
     public const int ListSize = 200;
 
@@ -88,7 +89,7 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
             c.SubmissionRound,
             c.Status == CaseStatus.ReturnedToVendor ? c.LastReason : null,
             docs,
-            c.Status == CaseStatus.ReturnedToVendor);
+            CanResubmitOnPortal(c));
     }
 
     public async Task<VendorSubmitResult> SubmitAsync(VendorUser user, VendorInvoiceForm form, IReadOnlyList<SubmittedFile> files, CancellationToken ct)
@@ -96,6 +97,23 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
         ArgumentNullException.ThrowIfNull(user);
         ArgumentNullException.ThrowIfNull(files);
         var submission = ToSubmission(user, form);
+
+        // A double-click or a browser retry of a slow upload must not create a second case
+        // (the two would then block each other as duplicates): the same invoice number from
+        // this vendor on the portal in the last few minutes is treated as the same submission.
+        var number = DuplicateDetector.NormaliseInvoiceNumber(submission.InvoiceNumber);
+        var recent = (await cases.ListForVendorAsync(user.VendorNo, 20, ct).ConfigureAwait(false))
+            .FirstOrDefault(c => IsOwn(c, user)
+                && c.Channel == SubmissionChannel.Portal
+                && c.Status != CaseStatus.Cancelled
+                && c.ReceivedAtUtc >= clock.UtcNow - RetryWindow
+                && number.Length > 0
+                && DuplicateDetector.NormaliseInvoiceNumber(c.InvoiceNumber) == number);
+        if (recent is not null)
+        {
+            return new VendorSubmitResult([], recent.Id, recent.Reference);
+        }
+
         var problems = await submissions.PrecheckAsync(submission, files, null, null, ct).ConfigureAwait(false);
         if (problems.Count > 0)
         {
@@ -113,6 +131,9 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
         }
     }
 
+    /// <summary>A repeat of the same invoice number within this window is a retry, not a new invoice.</summary>
+    public static readonly TimeSpan RetryWindow = TimeSpan.FromMinutes(10);
+
     /// <summary>Corrected details and replacement documents for a returned invoice.</summary>
     public async Task<VendorSubmitResult> ResubmitAsync(VendorUser user, Guid caseId, VendorInvoiceForm form, IReadOnlyList<SubmittedFile> files, CancellationToken ct)
     {
@@ -124,9 +145,11 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
             throw new NotFoundException("Invoice not found.");
         }
 
-        if (c.Status != CaseStatus.ReturnedToVendor)
+        if (!CanResubmitOnPortal(c))
         {
-            return new VendorSubmitResult(["This invoice is not waiting for a correction."], null, null);
+            return new VendorSubmitResult([c.Status == CaseStatus.ReturnedToVendor
+                ? "This invoice was not submitted on the portal. Please send the correction to Desicon Accounts Payable."
+                : "This invoice is not waiting for a correction."], null, null);
         }
 
         var submission = ToSubmission(user, form);
@@ -146,6 +169,10 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
         catch (DomainRuleException ex)
         {
             return new VendorSubmitResult([ex.Message], null, null);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return new VendorSubmitResult(["Desicon updated this invoice while you were correcting it. Reload the page to see its latest status."], null, null);
         }
     }
 
@@ -180,6 +207,15 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
             form.DeliveredOn);
     }
 
+    /// <summary>
+    /// Only portal or assisted submissions carry the document slots and supply type the
+    /// portal form needs; returned email/paper invoices are corrected through Accounts Payable.
+    /// </summary>
+    private static bool CanResubmitOnPortal(InvoiceCase c) =>
+        c.Status == CaseStatus.ReturnedToVendor
+        && c.Channel is SubmissionChannel.Portal or SubmissionChannel.Assisted
+        && c.SupplyType is SupplyType.Materials or SupplyType.Services;
+
     private static bool IsOwn(InvoiceCase c, VendorUser user) =>
         c.VendorNo is not null && string.Equals(c.VendorNo, user.VendorNo, StringComparison.OrdinalIgnoreCase);
 
@@ -200,6 +236,7 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
     {
         ScanStatus.Pending => "Virus check in progress",
         ScanStatus.Clean => "Checked",
+        ScanStatus.ScanFailed => "Being checked again",
         _ => "Rejected by the virus check",
     };
 }
