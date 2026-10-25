@@ -1,4 +1,5 @@
 using System.Text;
+using Desicon.Vim.Application.Abstractions;
 using Desicon.Vim.Application.Cases;
 using Desicon.Vim.Application.Submission;
 using Desicon.Vim.Application.VendorPortal;
@@ -30,7 +31,7 @@ public class VendorPortalServiceTests
 
     private VendorPortalService Portal() => new(_store, Submissions());
 
-    private VendorUser UserFor(string vendorNo, string vendorName, string email, string oid)
+    private static VendorUser UserFor(string vendorNo, string vendorName, string email, string oid)
     {
         var ctx = ActionContext.For(Procurement, Now);
         var (invitation, _) = VendorInvitation.Create(vendorNo, vendorName, email, ContactConfirmation.VendorCardEmail, null, [email], TimeSpan.FromDays(7), ctx);
