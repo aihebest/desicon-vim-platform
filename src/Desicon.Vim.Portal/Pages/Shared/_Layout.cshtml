@@ -5,11 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] · Desicon Vendor Portal</title>
     <link rel="stylesheet" href="~/portal.css" asp-append-version="true" />
+    <link rel="icon" href="~/favicon.ico" sizes="any" />
+    <link rel="apple-touch-icon" href="~/apple-touch-icon.png" />
     <script src="~/portal.js" asp-append-version="true" defer></script>
 </head>
 <body>
     <header class="bar">
-        <div class="brand"><span class="mark">D</span><div><strong>Desicon</strong><small>Vendor Portal</small></div></div>
+        <div class="brand"><img class="mark" src="~/desicon-mark.png" alt="Desicon" width="40" height="36" /><div><strong>Desicon</strong><small>Vendor Portal</small></div></div>
         @if (User.Identity?.IsAuthenticated == true)
         {
             <nav class="who">
