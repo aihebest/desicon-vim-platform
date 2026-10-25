@@ -1,4 +1,5 @@
 @page "/queue"
+@attribute [Authorize(Policy = Policies.AnyVimUser)]
 @inherits VimComponentBase
 
 <PageTitle>My queue · Desicon VIM</PageTitle>
