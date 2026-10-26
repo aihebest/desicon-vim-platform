@@ -22,6 +22,8 @@ Azure settings.
 
 ## 1. Install the tools (once)
 
+> **Quickest way on a new PC:** run `infra\scripts\setup-dev-machine.ps1`. It installs everything below (plus GitHub CLI, Terraform and the VS Code extensions), clones or updates the repo in `C:\Dev\desicon-vim-platform` without losing local edits, and builds and tests it.
+
 ```powershell
 winget install Microsoft.DotNet.SDK.10          # .NET 10 SDK (to build and run the code)
 winget install Microsoft.Azure.FunctionsCoreTools  # 'func' command, to run the background jobs
