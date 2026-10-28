@@ -86,5 +86,7 @@ updates:
     ignore:
       # azurerm 5.x is a major release with breaking changes; upgrade on
       # purpose with its upgrade guide open, in all roots and modules at once.
+      # "update-types" alone is not enough: Dependabot rewrote "~> 4.54" to "~> 5.10"
+      # as a range change (PR #41). Block every 5.x version explicitly.
       - dependency-name: "hashicorp/azurerm"
-        update-types: ["version-update:semver-major"]
+        versions: [">= 5.0.0"]
