@@ -28,7 +28,7 @@
     <PackageReference Include="Microsoft.Graph" Version="5.105.0" />
     <!-- Direct references lift vulnerable transitive versions (NU1902/NU1903). Pinned to the versions the first green CI run resolved; Dependabot proposes updates. -->
     <PackageReference Include="Microsoft.Kiota.Abstractions" Version="1.22.2" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
   </ItemGroup>
 
   <ItemGroup>
