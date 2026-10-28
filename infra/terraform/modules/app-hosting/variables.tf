@@ -138,12 +138,13 @@ variable "tags" {
 variable "vim_settings" {
   description = "Business settings read by both apps (section \"Vim\" in .NET configuration)."
   type = object({
-    workbench_url            = optional(string, "")
-    finance_manager_email    = optional(string, "")
-    accounts_payable_email   = optional(string, "")
-    verification_hours       = optional(number, 48)
-    verification_basis       = optional(string, "CalendarHours")
-    business_central_enabled = optional(bool, false)
+    workbench_url               = optional(string, "")
+    finance_manager_email       = optional(string, "")
+    accounts_payable_email      = optional(string, "")
+    management_escalation_email = optional(string, "")
+    verification_hours          = optional(number, 48)
+    verification_basis          = optional(string, "CalendarHours")
+    business_central_enabled    = optional(bool, false)
   })
   default = {}
 

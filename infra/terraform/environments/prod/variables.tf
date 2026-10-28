@@ -278,12 +278,13 @@ variable "log_daily_quota_gb" {
 variable "vim_settings" {
   description = "Business settings for the apps: workbench URL, Finance Manager and AP emails, review deadline, Business Central switch."
   type = object({
-    workbench_url            = optional(string, "")
-    finance_manager_email    = optional(string, "")
-    accounts_payable_email   = optional(string, "")
-    verification_hours       = optional(number, 48)
-    verification_basis       = optional(string, "CalendarHours")
-    business_central_enabled = optional(bool, false)
+    workbench_url               = optional(string, "")
+    finance_manager_email       = optional(string, "")
+    accounts_payable_email      = optional(string, "")
+    management_escalation_email = optional(string, "")
+    verification_hours          = optional(number, 48)
+    verification_basis          = optional(string, "CalendarHours")
+    business_central_enabled    = optional(bool, false)
   })
   default = {}
 }

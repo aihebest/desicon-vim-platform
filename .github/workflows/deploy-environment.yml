@@ -17,6 +17,8 @@
 #   BC_TENANT_ID (desiconerp.com), BC_ENVIRONMENT
 #   [BC_CLIENT_ID]  connector client id; empty = BC checks off  [BC_COMPANY_ID]  optional
 #   [ALERT_EMAILS]  comma-separated addresses for operational alerts; empty = none
+#   [FINANCE_MANAGER_EMAIL] [ACCOUNTS_PAYABLE_EMAIL] [MANAGEMENT_ESCALATION_EMAIL]
+#                   who receives workflow notices; empty = those notices are not sent
 #   [VENDOR_PORTAL_ENABLED]  "true" to create and deploy the vendor portal, with
 #   [EXTERNALID_SUBDOMAIN] (xxx of xxx.ciamlogin.com) and [PORTAL_CLIENT_ID]
 #   MAILBOX_USER_ID
@@ -90,6 +92,12 @@ jobs:
       TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
       TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
       TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
+      # Who receives notices: Finance Manager (flagged invoices, call-back invitations,
+      # escalations), Accounts Payable (reminders) and management (second escalation).
+      TF_VAR_vim_settings: >-
+        {"finance_manager_email":"${{ vars.FINANCE_MANAGER_EMAIL }}",
+        "accounts_payable_email":"${{ vars.ACCOUNTS_PAYABLE_EMAIL }}",
+        "management_escalation_email":"${{ vars.MANAGEMENT_ESCALATION_EMAIL }}"}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v7
@@ -219,6 +227,12 @@ jobs:
       TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
       TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
       TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
+      # Who receives notices: Finance Manager (flagged invoices, call-back invitations,
+      # escalations), Accounts Payable (reminders) and management (second escalation).
+      TF_VAR_vim_settings: >-
+        {"finance_manager_email":"${{ vars.FINANCE_MANAGER_EMAIL }}",
+        "accounts_payable_email":"${{ vars.ACCOUNTS_PAYABLE_EMAIL }}",
+        "management_escalation_email":"${{ vars.MANAGEMENT_ESCALATION_EMAIL }}"}
       KV_OFFICERS_RAW: ${{ vars.KEYVAULT_SECRETS_OFFICER_OBJECT_IDS }}
     steps:
       - uses: actions/checkout@v7

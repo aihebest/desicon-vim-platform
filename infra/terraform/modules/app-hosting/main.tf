@@ -61,6 +61,7 @@ locals {
     "Vim__WorkbenchUrl"              = coalesce(var.vim_settings.workbench_url, "https://${var.web_app_name}.azurewebsites.net")
     "Vim__FinanceManagerEmail"       = var.vim_settings.finance_manager_email
     "Vim__AccountsPayableEmail"      = var.vim_settings.accounts_payable_email
+    "Vim__ManagementEscalationEmail" = var.vim_settings.management_escalation_email
     "Vim__VerificationHours"         = tostring(var.vim_settings.verification_hours)
     "Vim__VerificationBasis"         = var.vim_settings.verification_basis
 
