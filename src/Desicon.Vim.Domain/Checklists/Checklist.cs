@@ -117,7 +117,51 @@ public sealed class ChecklistDefinition
 
         return new ChecklistEvaluation(unanswered, failed);
     }
+
+    /// <summary>
+    /// The items answered "No" (or "NA" where NA is not allowed) for a stage, with the
+    /// checker's remark: what the vendor is told was not met when an invoice is returned.
+    /// </summary>
+    public IReadOnlyList<ChecklistShortfall> NotMet(ChecklistStage stage, SupplyType supply, IReadOnlyCollection<ChecklistResponse> responses)
+    {
+        ArgumentNullException.ThrowIfNull(responses);
+        var byCode = responses.GroupBy(r => r.ItemCode, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.Last(), StringComparer.Ordinal);
+        var result = new List<ChecklistShortfall>();
+        foreach (var item in ItemsFor(stage, supply))
+        {
+            if (byCode.TryGetValue(item.Code, out var r)
+                && (r.Answer == ChecklistAnswer.No || (r.Answer == ChecklistAnswer.NotApplicable && !item.AllowNotApplicable)))
+            {
+                result.Add(new ChecklistShortfall(item, string.IsNullOrWhiteSpace(r.Remark) ? null : r.Remark.Trim()));
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>Plain-text reason for the vendor: the items not met, then the checker's comment.</summary>
+    public static string DescribeReturn(IReadOnlyList<ChecklistShortfall> notMet, string? comment)
+    {
+        ArgumentNullException.ThrowIfNull(notMet);
+        var note = string.IsNullOrWhiteSpace(comment) ? null : comment.Trim();
+        if (notMet.Count == 0)
+        {
+            return note ?? string.Empty;
+        }
+
+        var lines = new List<string> { "Not met on the Accounts checklist:" };
+        lines.AddRange(notMet.Select(n => n.Remark is null ? $"- {n.Item.Text}" : $"- {n.Item.Text} ({n.Remark})"));
+        if (note is not null)
+        {
+            lines.Add("Comment from Accounts: " + note);
+        }
+
+        return string.Join("\n", lines);
+    }
 }
+
+/// <summary>A checklist item that was not met, with the checker's remark.</summary>
+public sealed record ChecklistShortfall(ChecklistItem Item, string? Remark);
 
 public sealed record ChecklistEvaluation(IReadOnlyList<string> Unanswered, IReadOnlyList<string> Failed)
 {

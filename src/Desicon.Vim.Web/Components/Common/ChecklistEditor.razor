@@ -19,7 +19,7 @@
                         <button type="button" class="opt @(answer == ChecklistAnswer.NotApplicable ? "on-na" : "")" @onclick="() => Set(item.Code, ChecklistAnswer.NotApplicable)">NA</button>
                     }
                 </div>
-                <input class="check-remark" placeholder="Remark" value="@(Remarks.GetValueOrDefault(item.Code))" @onchange="e => Remarks[item.Code] = e.Value?.ToString() ?? string.Empty" />
+                <input class="check-remark" placeholder="Remark (the vendor sees it if this is No)" value="@(Remarks.GetValueOrDefault(item.Code))" @onchange="e => Remarks[item.Code] = e.Value?.ToString() ?? string.Empty" />
             </div>
         }
     </fieldset>

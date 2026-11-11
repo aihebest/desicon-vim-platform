@@ -237,6 +237,51 @@ public class SubmissionWorkflowTests
     }
 
     [Fact]
+    public async Task A_rejection_lists_the_checklist_items_marked_no_and_tells_the_finance_manager()
+    {
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+        var answers = AllYes()
+            .Select(a => a.ItemCode switch
+            {
+                "ACC_LETTERHEAD" => a with { Answer = ChecklistAnswer.No },
+                "ACC_AMOUNT_WORDS" => a with { Answer = ChecklistAnswer.No, Remark = "Figures only" },
+                _ => a,
+            })
+            .ToList();
+
+        await Workflow().ReturnToVendorAsync(c.Id, "Please reissue the invoice.", answers, Ap2, default);
+
+        Assert.Equal(CaseStatus.ReturnedToVendor, c.Status);
+        Assert.Contains("- Invoice is on the vendor's letter-headed paper", c.LastReason, StringComparison.Ordinal);
+        Assert.Contains("- Invoice amount is stated in words and figures (Figures only)", c.LastReason, StringComparison.Ordinal);
+        Assert.Contains("Comment from Accounts: Please reissue the invoice.", c.LastReason, StringComparison.Ordinal);
+        Assert.DoesNotContain("Standard invoice", c.LastReason, StringComparison.Ordinal);
+        Assert.Contains(c.ChecklistAnswers, a => a.ItemCode == "ACC_LETTERHEAD" && a.Answer == ChecklistAnswer.No);
+
+        var toVendor = Assert.Single(_store.Sent, n => n.Template == "ReturnedToVendor");
+        Assert.Equal("accounts@abc.example", toVendor.ToAddress);
+        Assert.Contains("letter-headed paper<br>", toVendor.HtmlBody, StringComparison.Ordinal);
+        var toFm = Assert.Single(_store.Sent, n => n.Template == "ReturnedByAccountsNotice");
+        Assert.Equal("finance.manager@desicon.example", toFm.ToAddress);
+        Assert.Contains("Figures only", toFm.HtmlBody, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_rejection_needs_a_comment_only_when_no_item_is_marked_no()
+    {
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+
+        await Assert.ThrowsAsync<DomainRuleException>(() => Workflow().ReturnToVendorAsync(c.Id, null, AllYes(), Ap2, default));
+
+        var oneNo = AllYes().Select(a => a.ItemCode == "ACC_STANDARD" ? a with { Answer = ChecklistAnswer.No } : a).ToList();
+        await Workflow().ReturnToVendorAsync(c.Id, null, oneNo, Ap2, default);
+        Assert.Equal(CaseStatus.ReturnedToVendor, c.Status);
+        Assert.Contains("Standard invoice, not a proforma invoice", c.LastReason, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task The_officer_who_keyed_in_an_invoice_cannot_accept_it()
     {
         var c = await SubmitAndScanAsync();

@@ -373,6 +373,41 @@ public sealed class InvoiceCase
         Move(t, ctx, reason, null);
     }
 
+    public const int MaxReasonLength = 2000;
+
+    /// <summary>
+    /// Accounts' rejection with the checklist as ticked: every item answered "No" is
+    /// recorded and listed for the vendor, followed by the comment. A comment is
+    /// required only when no item was marked "No".
+    /// </summary>
+    public void ReturnToVendor(string? comment, IReadOnlyCollection<ChecklistResponse> answers, ChecklistDefinition checklist, ActionContext ctx)
+    {
+        ArgumentNullException.ThrowIfNull(answers);
+        ArgumentNullException.ThrowIfNull(checklist);
+        ArgumentNullException.ThrowIfNull(ctx);
+        var t = WorkflowRules.Resolve(CaseAction.ReturnToVendor, Status, ctx.Actor);
+
+        // Only Accounts' confirmatory check has a checklist; the Finance Manager and the
+        // automatic checks return with a reason alone.
+        var atAccounts = Status == CaseStatus.WithAccountsPayable;
+        var given = atAccounts ? answers.Where(a => a.Answer != ChecklistAnswer.Unanswered).ToList() : [];
+        var notMet = checklist.NotMet(ChecklistStage.AccountsCheck, SupplyType, given);
+        if (notMet.Count == 0)
+        {
+            RequireReason(comment);
+        }
+
+        var reason = ChecklistDefinition.DescribeReturn(notMet, comment);
+        if (reason.Length > MaxReasonLength)
+        {
+            reason = reason[..(MaxReasonLength - 1)] + "…";
+        }
+
+        SaveAnswers(checklist, ChecklistStage.AccountsCheck, given, ctx);
+        ClearDeadline();
+        Move(t, ctx, reason, new { checklist = checklist.Version, notMet = notMet.Select(n => n.Item.Code).ToArray() });
+    }
+
     /// <summary>
     /// Corrected details against the same reference. New documents are attached
     /// afterwards (round + 1); the automatic checks then run again from the start.
