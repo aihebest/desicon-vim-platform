@@ -140,7 +140,11 @@
         @if (_actions.Contains(CaseAction.ReturnToVendor) || _actions.Contains(CaseAction.Cancel))
         {
             <h3>Return or cancel</h3>
-            <textarea rows="2" placeholder="Reason (sent to the vendor when returning) — required" @bind="_reason"></textarea>
+            @if (_actions.Contains(CaseAction.Accept))
+            {
+                <p class="muted">When you return an invoice, every checklist item marked <strong>No</strong> above (with its remark) is sent to the vendor, followed by your comment. A comment is required only if no item is marked No.</p>
+            }
+            <textarea rows="2" placeholder="Comment (sent to the vendor when returning; required to cancel)" @bind="_reason"></textarea>
             <div class="button-row">
                 @if (_actions.Contains(CaseAction.ReturnToVendor)) { <button class="warn" disabled="@Busy" @onclick="ReturnAsync">Return to vendor</button> }
                 @if (_actions.Contains(CaseAction.Cancel)) { <button class="danger" disabled="@Busy" @onclick="CancelAsync">Cancel case</button> }
@@ -226,7 +230,12 @@
 
     private Task RecordErpAsync() => RunActionAsync(sp => Wf(sp).RecordErpEntryAsync(Id, _erpNumber ?? string.Empty, Me!, default), "Business Central document number recorded.");
 
-    private Task ReturnAsync() => RunActionAsync(sp => Wf(sp).ReturnToVendorAsync(Id, _reason ?? string.Empty, Me!, default), "Returned. The vendor will be emailed the reason.");
+    private Task ReturnAsync()
+    {
+        // Accounts' ticks go with the rejection: every "No" is listed for the vendor.
+        var answers = _accountsChecklist?.Responses ?? [];
+        return RunActionAsync(sp => Wf(sp).ReturnToVendorAsync(Id, _reason, answers, Me!, default), "Returned. The vendor will be emailed what was not met.");
+    }
 
     private Task CancelAsync() => RunActionAsync(sp => Wf(sp).CancelAsync(Id, _reason ?? string.Empty, Me!, default), "Case cancelled.");
 

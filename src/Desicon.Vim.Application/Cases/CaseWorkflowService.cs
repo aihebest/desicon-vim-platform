@@ -52,13 +52,30 @@ public sealed class CaseWorkflowService(
     }
 
     /// <summary>Accounts (confirmatory check) or the Finance Manager (exception): reject with reasons.</summary>
-    public async Task ReturnToVendorAsync(Guid caseId, string reason, Actor actor, CancellationToken ct)
+    public Task ReturnToVendorAsync(Guid caseId, string reason, Actor actor, CancellationToken ct) =>
+        ReturnToVendorAsync(caseId, reason, [], actor, ct);
+
+    /// <summary>
+    /// As above, with Accounts' checklist as ticked: every item marked "No" is recorded and
+    /// listed for the vendor (email and portal) ahead of the comment. When Accounts rejects,
+    /// the Finance Manager is told too, so rejections are visible to Finance management.
+    /// </summary>
+    public async Task ReturnToVendorAsync(Guid caseId, string? comment, IReadOnlyCollection<ChecklistResponse> answers, Actor actor, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(actor);
         var c = await LoadAsync(caseId, ct).ConfigureAwait(false);
-        c.ReturnToVendor(reason, Ctx(actor));
+        var byAccounts = c.Status == CaseStatus.WithAccountsPayable;
+        c.ReturnToVendor(comment, answers, _checklist, Ctx(actor));
+        var reason = c.LastReason ?? string.Empty;
         if (!string.IsNullOrWhiteSpace(c.SenderEmail))
         {
             outbox.Enqueue(NotificationTemplates.ReturnedToVendor(c, c.SenderEmail, reason));
+        }
+
+        var o = options.Value;
+        if (byAccounts && !string.IsNullOrWhiteSpace(o.FinanceManagerEmail))
+        {
+            outbox.Enqueue(NotificationTemplates.ReturnedByAccountsNotice(c, o.FinanceManagerEmail, actor.DisplayName, reason, o.WorkbenchUrl));
         }
 
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);

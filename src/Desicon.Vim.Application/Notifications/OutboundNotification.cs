@@ -29,6 +29,10 @@ public static class NotificationTemplates
 {
     private static string E(string? s) => WebUtility.HtmlEncode(s ?? string.Empty);
 
+    /// <summary>Encoded text with its line breaks kept (multi-line reasons).</summary>
+    private static string Lines(string? s) =>
+        string.Join("<br>", (s ?? string.Empty).Split('\n').Select(l => E(l.TrimEnd('\r'))));
+
     private static string Footer =>
         "<p style=\"color:#666;font-size:12px\">Desicon Engineering Limited — Accounts Payable. This is an automated message from the Vendor Invoice Management Platform. Please quote the reference in any reply.</p>";
 
@@ -53,8 +57,16 @@ public static class NotificationTemplates
         c.Id, nameof(ReturnedToVendor), NotificationChannel.Email, to,
         $"Not accepted: {c.Reference} — invoice {c.InvoiceNumber} needs correction",
         $"<p>Dear {E(c.VendorName ?? "Vendor")},</p><p>Your submission <strong>{E(c.Reference)}</strong>{InvoiceLine(c)} has <strong>not been accepted</strong>, so no credit period is running on it.</p>" +
-        $"<p><strong>Reason:</strong> {E(reason)}</p>" +
+        $"<p><strong>Reason:</strong><br>{Lines(reason)}</p>" +
         $"<p>Please correct the points above and resubmit against reference <strong>{E(c.Reference)}</strong>. If you need help, contact Accounts Payable quoting this reference.</p>" + Footer);
+
+    /// <summary>For the Finance Manager's information when Accounts rejects an invoice.</summary>
+    public static OutboundNotification ReturnedByAccountsNotice(InvoiceCase c, string to, string returnedBy, string reason, string workbenchUrl) => new(
+        c.Id, nameof(ReturnedByAccountsNotice), NotificationChannel.Email, to,
+        $"For information: {c.Reference} returned to vendor — {c.VendorName} — {c.InvoiceNumber}",
+        $"<p>Accounts ({E(returnedBy)}) did not accept invoice <strong>{E(c.Reference)}</strong> and returned it to the vendor. No credit period is running on it.</p>" +
+        $"<p><strong>Reason sent to the vendor:</strong><br>{Lines(reason)}</p>" +
+        Summary(c) + $"<p>No action is needed. <a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
 
     public static OutboundNotification Accepted(InvoiceCase c, string to) => new(
         c.Id, nameof(Accepted), NotificationChannel.Email, to,
