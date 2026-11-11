@@ -97,7 +97,7 @@ try {
     Write-Host "Step 3: Registering the identity with Exchange..." -ForegroundColor Cyan
     $exoSp = Get-ServicePrincipal -Identity $FunctionAppPrincipalId -ErrorAction SilentlyContinue
     if (-not $exoSp) {
-        $null = New-ServicePrincipal -AppId $sp.appId -ObjectId $FunctionAppPrincipalId -DisplayName $sp.displayName
+        $null = New-ServicePrincipal -AppId $sp.appId -ObjectId $FunctionAppPrincipalId -DisplayName $sp.displayName -ErrorAction Stop
         Write-Host "  Registered."
     } else {
         Write-Host "  Already registered."
@@ -111,17 +111,28 @@ try {
     # limited to the mailboxes this filter matches.
     # ------------------------------------------------------------------------
     Write-Host "Step 4: Creating the mailbox scope..." -ForegroundColor Cyan
-    $mailbox = Get-Mailbox -Identity $MailboxAddress
+    $mailbox = Get-Mailbox -Identity $MailboxAddress -ErrorAction Stop
     $primary = $mailbox.PrimarySmtpAddress.ToString()
     $scopeName = "VIM $Environment - invoice mailbox only"
     $filter = "PrimarySmtpAddress -eq '$primary'"
 
+    # Exchange refuses a second scope with the same filter, so when two environments
+    # share one mailbox (UAT and prod both use invoices@) the existing scope is reused.
+    # Exchange cmdlets ignore $ErrorActionPreference, hence -ErrorAction Stop throughout.
     $scope = Get-ManagementScope -Identity $scopeName -ErrorAction SilentlyContinue
     if (-not $scope) {
-        $null = New-ManagementScope -Name $scopeName -RecipientRestrictionFilter $filter
-        Write-Host "  Created scope '$scopeName' ($filter)."
+        $sameFilter = Get-ManagementScope -ErrorAction Stop |
+            Where-Object { $_.RecipientFilter -eq $filter -and -not $_.Exclusive } |
+            Select-Object -First 1
+        if ($sameFilter) {
+            $scopeName = $sameFilter.Name
+            Write-Host "  Reusing scope '$scopeName': it already matches only $primary."
+        } else {
+            $null = New-ManagementScope -Name $scopeName -RecipientRestrictionFilter $filter -ErrorAction Stop
+            Write-Host "  Created scope '$scopeName' ($filter)."
+        }
     } elseif ($scope.RecipientFilter -ne $filter) {
-        Set-ManagementScope -Identity $scopeName -RecipientRestrictionFilter $filter
+        Set-ManagementScope -Identity $scopeName -RecipientRestrictionFilter $filter -ErrorAction Stop
         Write-Host "  Updated scope filter to: $filter"
     } else {
         Write-Host "  Scope already exists."
@@ -140,7 +151,7 @@ try {
         $existing = Get-ManagementRoleAssignment -Identity $assignmentName -ErrorAction SilentlyContinue
         if (-not $existing) {
             New-ManagementRoleAssignment -Name $assignmentName -App $FunctionAppPrincipalId `
-                -Role $role -CustomResourceScope $scopeName | Out-Null
+                -Role $role -CustomResourceScope $scopeName -ErrorAction Stop | Out-Null
             Write-Host "  Granted '$role'."
         } else {
             Write-Host "  '$role' already granted."
