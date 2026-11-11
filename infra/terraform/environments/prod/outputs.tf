@@ -77,3 +77,8 @@ output "portal_url" {
   description = "Vendor portal address; empty when the portal is off."
   value       = module.app_hosting.portal_default_hostname == null ? "" : "https://${module.app_hosting.portal_default_hostname}"
 }
+
+output "public_data_endpoints_accepted" {
+  description = "True when prod deliberately runs data services on public endpoints (ADR 0003)."
+  value       = var.accept_public_data_endpoints
+}

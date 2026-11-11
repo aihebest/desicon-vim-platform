@@ -45,6 +45,12 @@ variable "enable_private_networking" {
   default     = false
 }
 
+variable "accept_public_data_endpoints" {
+  description = "Recorded risk acceptance (docs/adr/0003): prod may run SQL, Storage, Key Vault and Document Intelligence on public endpoints protected by Entra-only sign-in, instead of private endpoints. The policy gate refuses a public prod plan unless this is true. No effect outside prod."
+  type        = bool
+  default     = false
+}
+
 variable "vnet_address_space" {
   description = "VNet address space (only used when enable_private_networking = true)."
   type        = list(string)

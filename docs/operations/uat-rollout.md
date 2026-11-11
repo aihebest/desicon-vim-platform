@@ -209,12 +209,16 @@ az login --tenant 31a1b00e-9c2a-4457-a4aa-db82ea2673a2 --allow-no-subscriptions
 
 ## Prod checklist (at go-live)
 
-Same steps 1–10 with `prod` in place of `uat`, plus:
+Production **starts lean** (ADR 0003): one Basic B2 server, a serverless database, public endpoints protected by Entra-only sign-in. That means the steps are exactly the UAT steps 1–10 with `prod` in place of `uat`, on GitHub-hosted runners. No VNet and no self-hosted runner.
 
-- **Cost:** prod is the expensive one: 2 × P1v3, a provisioned GP_Gen5_2 database, zone-redundant storage and private networking. Start it only at go-live.
-- **BC:** environment *Production* (`BC_ENVIRONMENT`); a BC connector `(prod)` with D365 READ.
-- **Private networking is on**, so SQL has no public endpoint. Before step 8, set up the **self-hosted runner** on a small VM in the VNet and set `PROD_RUNNER_LABEL` (infrastructure.md §4.11). Run the `sqlcmd` steps from inside the VNet as well.
-- **Protect the environment:** **Settings → Environments → prod → Required reviewers**, and deployment branch `main` only.
-- **Delete lock:** `az lock create --name vim-prod-no-delete --resource-group rg-vim-prod-weu --lock-type CanNotDelete`
-- **Retention:** confirm with Finance before go-live. The prod `variables.tf` starting points are 35-day database backups with 7-year long-term retention, and 90 days of logs.
+Differences from UAT:
+
+- **Business Central:** environment **Production** (`BC_ENVIRONMENT = Production`), a BC connector `(prod)` with **D365 READ** in the production company. The platform only reads; it never posts or pays.
+- **Deploy:** choose **Last environment = prod**. Dev and UAT deploy first, so every prod release has passed through UAT.
+- **Protect the environment** (GitHub → Settings → Environments → `prod`): **Required reviewers** (you), deployment branch `main` only.
+- **Delete lock**, after the first apply: `az lock create --name vim-prod-no-delete --resource-group rg-vim-prod-weu --lock-type CanNotDelete`
+- **Retention:** prod keeps 35-day database backups with 7-year long-term retention and 90 days of logs; confirm with Finance.
+- **Roles:** assign the real Finance and Procurement staff under *Desicon VIM Workbench (prod)*. Procurement must never also hold Accounts Payable.
 - **Cut-over:** invite vendors in waves (pilot, then Wave 1 = vendors with open POs, then Wave 2) with about 4 weeks of overlap; then switch email intake off for good.
+
+To move to the full specification later (Premium servers, provisioned database, private networking), see ADR 0003 and `infrastructure.md` §4.11.

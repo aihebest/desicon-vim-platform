@@ -14,7 +14,8 @@ package terraform.vim.security
 #   4. Minimum TLS 1.2 (storage, SQL, web app, function app).
 #   5. Azure SQL is Microsoft Entra-only (no SQL logins/passwords).
 #   6. Key Vault has purge protection (and RBAC authorisation).
-#   7. In prod, no data service accepts public network traffic.
+#   7. In prod, no data service accepts public network traffic, unless the
+#      exception is recorded (accept_public_data_endpoints = true, ADR 0003).
 #   8. Document Intelligence has API keys (local auth) disabled.
 #
 # Run locally (PowerShell, from the repo root):
@@ -178,12 +179,17 @@ data_service_kinds := {
 	"azurerm_cognitive_account",
 }
 
+# A recorded, deliberate exception (docs/adr/0003): the prod root sets
+# accept_public_data_endpoints = true. Without it, prod must be private.
+public_endpoints_accepted if input.variables.accept_public_data_endpoints.value == true
+
 deny contains msg if {
 	is_prod
+	not public_endpoints_accepted
 	some kind in data_service_kinds
 	some r in resources_of(kind)
 	after(r).public_network_access_enabled != false
-	msg := sprintf("%s: public_network_access_enabled must be false in prod. Reach it through its private endpoint (enable_private_networking = true).", [r.address])
+	msg := sprintf("%s: public_network_access_enabled must be false in prod. Reach it through its private endpoint (enable_private_networking = true), or record the exception (accept_public_data_endpoints = true, ADR 0003).", [r.address])
 }
 
 # -- 8. Document Intelligence: no API keys ----------------------------------------------

@@ -196,6 +196,20 @@ test_prod_public_sql_denied if {
 	any_contains(denies(plan("prod", [change("azurerm_mssql_server", "sql", bad)])), "must be false in prod")
 }
 
+test_prod_public_sql_allowed_only_with_recorded_acceptance if {
+	bad := object.union(compliant_sql, {"public_network_access_enabled": true})
+	accepted := object.union(
+		plan("prod", [change("azurerm_mssql_server", "sql", bad)]),
+		{"variables": {"environment": {"value": "prod"}, "accept_public_data_endpoints": {"value": true}}},
+	)
+	not any_contains(denies(accepted), "must be false in prod")
+	refused := object.union(
+		plan("prod", [change("azurerm_mssql_server", "sql", bad)]),
+		{"variables": {"environment": {"value": "prod"}, "accept_public_data_endpoints": {"value": false}}},
+	)
+	any_contains(denies(refused), "must be false in prod")
+}
+
 test_prod_public_storage_denied if {
 	bad := object.union(compliant_storage, {"public_network_access_enabled": true})
 	any_contains(denies(plan("prod", [change("azurerm_storage_account", "docs", bad)])), "must be false in prod")
