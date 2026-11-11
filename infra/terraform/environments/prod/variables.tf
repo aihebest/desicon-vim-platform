@@ -1,6 +1,13 @@
 ###############################################################################
 # Variables -- prod environment
 #
+# LEAN START (ADR 0003, Nov 2026): one Basic B2 server, a serverless database and
+# public endpoints protected by Entra-only sign-in. To move to the full
+# specification later, change these defaults: app_service_sku_name "P1v3",
+# app_service_worker_count 2, sql_sku_name "GP_Gen5_2",
+# enable_private_networking true (needs a self-hosted runner inside the VNet)
+# and accept_public_data_endpoints false.
+#
 # Defaults here are the sizing for prod. Values without defaults are
 # identifiers specific to Desicon's tenant; supply them in
 # prod.auto.tfvars locally (see example.auto.tfvars.example) or as
@@ -41,6 +48,12 @@ variable "location" {
 
 variable "enable_private_networking" {
   description = "Create a VNet, private endpoints and private DNS, and turn off public network access on SQL, Storage, Key Vault and Document Intelligence. Database migrations then need a runner inside the VNet (see docs)."
+  type        = bool
+  default     = false
+}
+
+variable "accept_public_data_endpoints" {
+  description = "Recorded risk acceptance (docs/adr/0003): prod may run SQL, Storage, Key Vault and Document Intelligence on public endpoints protected by Entra-only sign-in, instead of private endpoints. The policy gate refuses a public prod plan unless this is true. No effect outside prod."
   type        = bool
   default     = true
 }
@@ -126,13 +139,13 @@ variable "mailbox_user_id" {
 variable "app_service_sku_name" {
   description = "App Service plan SKU shared by the web and function apps."
   type        = string
-  default     = "P1v3"
+  default     = "B2"
 }
 
 variable "app_service_worker_count" {
   description = "Number of plan instances."
   type        = number
-  default     = 2
+  default     = 1
 }
 
 variable "app_service_zone_balancing_enabled" {
@@ -145,7 +158,7 @@ variable "app_service_zone_balancing_enabled" {
 variable "sql_sku_name" {
   description = "Database SKU. GP_S_Gen5_* = serverless (auto-pause); GP_Gen5_* = provisioned."
   type        = string
-  default     = "GP_Gen5_2"
+  default     = "GP_S_Gen5_1"
 }
 
 variable "sql_max_size_gb" {
@@ -272,7 +285,7 @@ variable "alert_emails" {
 variable "log_daily_quota_gb" {
   description = "Daily Log Analytics ingestion cap in GB (-1 = unlimited)."
   type        = number
-  default     = -1
+  default     = 5
 }
 
 variable "vim_settings" {
