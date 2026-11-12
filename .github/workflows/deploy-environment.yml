@@ -396,8 +396,24 @@ jobs:
           name: functions
           path: functions
 
+      # The function app shares a small plan with the two web apps, which have just
+      # restarted, so the first upload sometimes gets a 503 from the busy server.
+      # One retry after a pause avoids repeating the whole hour-long run.
       - name: Deploy function app
+        id: func_deploy
         if: ${{ !inputs.infra_only }}
+        continue-on-error: true
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ steps.tfout.outputs.function_app_name }}
+          package: functions
+
+      - name: Wait before retrying the function app
+        if: ${{ !inputs.infra_only && steps.func_deploy.outcome == 'failure' }}
+        run: sleep 180
+
+      - name: Deploy function app (retry)
+        if: ${{ !inputs.infra_only && steps.func_deploy.outcome == 'failure' }}
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ steps.tfout.outputs.function_app_name }}
