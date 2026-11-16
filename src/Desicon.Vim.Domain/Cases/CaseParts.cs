@@ -261,7 +261,10 @@ public static class FlagCodes
     /// </summary>
     public const string AdvancePaid = "ADVANCE_PAID";
 
-    /// <summary>The advance the vendor declared differs from Business Central. Blocking: the Finance Manager decides.</summary>
+    /// <summary>Business Central's advance figure could not be read, so Accounts must check the order by hand. Advisory.</summary>
+    public const string AdvanceUnknown = "ADVANCE_UNKNOWN";
+
+    /// <summary>The vendor declared more advance than Business Central shows. Blocking: the Finance Manager decides.</summary>
     public const string AdvanceMismatch = "ADVANCE_MISMATCH";
 
     /// <summary>

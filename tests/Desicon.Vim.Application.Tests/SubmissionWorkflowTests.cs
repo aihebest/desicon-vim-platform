@@ -246,8 +246,8 @@ public class SubmissionWorkflowTests
         Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
         var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
         Assert.False(flag.Blocking);
-        Assert.Contains("NGN 300,000.00 (30%)", flag.Description);
-        Assert.Contains("Balance payable: NGN 700,000.00", flag.Description);
+        Assert.Contains("NGN 300,000.00 before VAT (30%)", flag.Description);
+        Assert.Contains("Balance payable: about NGN 700,000.00", flag.Description);
         Assert.Single(_store.Sent, n => n.Template == "AdvanceOnOrderNotice");
 
         var refused = await Assert.ThrowsAsync<DomainRuleException>(() => Workflow().AcceptAsync(c.Id, AllYes(), Ap2, default));
@@ -284,14 +284,41 @@ public class SubmissionWorkflowTests
     [Fact]
     public async Task A_declared_advance_is_flagged_even_when_business_central_gives_no_figure()
     {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = null, UnappliedPaymentsAmount = null };
         var c = await SubmitAndScanAsync(Submission() with { DeclaredAdvance = 400_000m });
         await Processor().RunAsync(default);
 
         Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
         Assert.Equal(400_000m, c.DeclaredAdvance);
         var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
-        Assert.Contains("The vendor declared an advance of NGN 400,000.00", flag.Description);
+        Assert.Contains("The vendor declared NGN 400,000.00 already received", flag.Description);
         Assert.DoesNotContain(c.Flags, f => f.Code == FlagCodes.AdvanceMismatch);
+    }
+
+    [Fact]
+    public async Task A_payment_not_yet_applied_to_an_invoice_is_shown_to_accounts()
+    {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = 300_000m, AdvancePercent = 30m, UnappliedPaymentsAmount = 700_000m };
+        var c = await SubmitAndScanAsync(Submission() with { DeclaredAdvance = 950_000m });
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
+        var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
+        Assert.Contains("NGN 700,000.00 that are not applied to any invoice", flag.Description);
+        Assert.Contains("FULLY PAID IN ADVANCE", flag.Description);
+        Assert.DoesNotContain(c.Flags, f => f.Code == FlagCodes.AdvanceMismatch);
+    }
+
+    [Fact]
+    public async Task When_business_central_cannot_give_the_advance_accounts_are_told_to_check_by_hand()
+    {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = null, UnappliedPaymentsAmount = null };
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
+        Assert.Contains(c.Flags, f => f.Code == FlagCodes.AdvanceUnknown && !f.Blocking);
+        Assert.DoesNotContain(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
     }
 
     [Fact]

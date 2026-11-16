@@ -171,7 +171,7 @@ internal sealed class FakeErp : IErpGateway
 
     public Dictionary<string, ErpVendor> Vendors { get; } = [];
 
-    public ErpOrderCheck Order { get; set; } = new(true, true, true, true, 10_000_000m, "NGN", ReceivedNotInvoicedAmount: 1_000_000m);
+    public ErpOrderCheck Order { get; set; } = new(true, true, true, true, 10_000_000m, "NGN", ReceivedNotInvoicedAmount: 1_000_000m, AdvanceInvoicedAmount: 0m, UnappliedPaymentsAmount: 0m);
 
     /// <summary>When set, every call throws (Business Central unreachable).</summary>
     public bool Down { get; set; }

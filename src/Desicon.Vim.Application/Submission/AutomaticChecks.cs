@@ -90,48 +90,66 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
     /// </summary>
     private void AddAdvanceFlags(InvoiceSubmission s, ErpOrderCheck? order, List<CheckFlag> flags)
     {
-        var declared = s.DeclaredAdvance is > 0 ? s.DeclaredAdvance : null;
-        var inBc = order?.AdvanceInvoicedAmount;
-        if (declared is null && inBc is not > 0)
-        {
-            return;
-        }
-
         var inv = CultureInfo.InvariantCulture;
         var currency = s.Currency.Trim().ToUpperInvariant();
         var orderNo = s.OrderNumber.Trim().ToUpperInvariant();
         var tolerance = options.Value.FullValueTolerance;
-        var paid = inBc is > 0 ? inBc.Value : declared!.Value;
-        var balance = Math.Max(0, s.Amount - paid);
 
-        string source;
-        if (inBc is > 0)
+        var declared = s.DeclaredAdvance is > 0 ? s.DeclaredAdvance : null;
+        var prepaid = order?.AdvanceInvoicedAmount;
+        var unapplied = order?.UnappliedPaymentsAmount is > 0 ? order.UnappliedPaymentsAmount.Value : 0m;
+        var inBc = (prepaid is > 0 ? prepaid.Value : 0m) + unapplied;
+
+        if (declared is null && inBc <= 0)
+        {
+            if (order is not null && prepaid is null)
+            {
+                flags.Add(new CheckFlag(
+                    FlagCodes.AdvanceUnknown,
+                    $"Business Central's prepayment figure could not be read for {orderNo}. Check the order's Prepayment section and the vendor's payments before accepting.",
+                    Blocking: false));
+            }
+
+            return;
+        }
+
+        var parts = new List<string>();
+        if (prepaid is > 0)
         {
             var percent = order!.AdvancePercent is > 0 ? string.Create(inv, $" ({order.AdvancePercent.Value:0.##}%)") : string.Empty;
-            source = string.Create(inv, $"Business Central shows an advance of {currency} {inBc.Value:N2}{percent} on {orderNo}.");
+            parts.Add(string.Create(inv, $"Business Central shows an advance of {currency} {prepaid.Value:N2} before VAT{percent} on {orderNo}."));
         }
-        else
+
+        if (unapplied > 0)
         {
-            source = string.Create(inv, $"The vendor declared an advance of {currency} {paid:N2} already received on {orderNo}.");
-            if (inBc is null)
-            {
-                source += " Business Central's prepayment figure was not available, so check the order's Prepayment section and the vendor's payments.";
-            }
+            parts.Add(string.Create(inv, $"Business Central shows payments to this vendor of {currency} {unapplied:N2} that are not applied to any invoice yet; check whether they were paid for {orderNo}."));
         }
 
-        var due = balance <= tolerance
-            ? " This invoice is FULLY PAID IN ADVANCE: no further payment is due."
-            : string.Create(inv, $" Balance payable: {currency} {balance:N2}.");
-        flags.Add(new CheckFlag(
-            FlagCodes.AdvancePaid,
-            source + due + " Apply the advance when booking the invoice in Business Central; do not pay the full invoice amount.",
-            Blocking: false));
+        if (declared is not null)
+        {
+            parts.Add(string.Create(inv, $"The vendor declared {currency} {declared.Value:N2} already received on {orderNo}."));
+        }
 
-        if (inBc is not null && declared is not null && Math.Abs(declared.Value - inBc.Value) > tolerance)
+        if (order is null || prepaid is null)
+        {
+            parts.Add("Business Central's prepayment figure was not available, so check the order's Prepayment section and the vendor's payments.");
+        }
+
+        var paid = inBc > 0 ? inBc : declared!.Value;
+        var balance = Math.Max(0, s.Amount - paid);
+        parts.Add(balance <= tolerance
+            ? "This invoice appears FULLY PAID IN ADVANCE: no further payment is due."
+            : string.Create(inv, $"Balance payable: about {currency} {balance:N2}."));
+        parts.Add("Apply the advance when booking the invoice in Business Central; do not pay the full invoice amount.");
+        flags.Add(new CheckFlag(FlagCodes.AdvancePaid, string.Join(' ', parts), Blocking: false));
+
+        // The vendor says it received more than Business Central shows: something was paid that
+        // the books do not show against this vendor, so the Finance Manager decides first.
+        if (order is not null && prepaid is not null && declared is not null && declared.Value - inBc > tolerance)
         {
             flags.Add(new CheckFlag(
                 FlagCodes.AdvanceMismatch,
-                string.Create(inv, $"The vendor declared an advance of {currency} {declared.Value:N2} on {orderNo}, but Business Central shows {currency} {inBc.Value:N2}. Confirm what was actually paid, including any payment made outside the order's prepayment, before this goes to Accounts."),
+                string.Create(inv, $"The vendor declared {currency} {declared.Value:N2} already received on {orderNo}, but Business Central shows {currency} {inBc:N2}. Confirm what was actually paid before this goes to Accounts."),
                 Blocking: true));
         }
     }

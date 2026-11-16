@@ -1,6 +1,7 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Azure.Core;
 using Azure.Identity;
 using Desicon.Vim.Application.Abstractions;
@@ -83,14 +84,73 @@ public sealed class BusinessCentralGateway(
         var hasReceipt = receivedNotInvoiced > 0 || (order.PurchaseOrderLines is null && order.FullyReceived);
         var currency = string.IsNullOrWhiteSpace(order.CurrencyCode) ? options.Value.LocalCurrencyCode : order.CurrencyCode.Trim();
 
+        var belongs = string.Equals(order.VendorNumber, vendorNo?.Trim(), StringComparison.OrdinalIgnoreCase);
+        var advance = belongs ? await ReadAdvanceAsync(orderNumber.Trim(), order.VendorNumber!, currency, ct).ConfigureAwait(false) : default;
+
         return new ErpOrderCheck(
             OrderFound: true,
-            BelongsToVendor: string.Equals(order.VendorNumber, vendorNo?.Trim(), StringComparison.OrdinalIgnoreCase),
+            BelongsToVendor: belongs,
             IsOpen: string.Equals(order.Status, "Open", StringComparison.OrdinalIgnoreCase),
             HasPostedReceipt: hasReceipt,
             RemainingAmount: remaining,
             Currency: currency,
-            ReceivedNotInvoicedAmount: receivedNotInvoiced);
+            ReceivedNotInvoicedAmount: receivedNotInvoiced,
+            AdvanceInvoicedAmount: advance.Invoiced,
+            AdvancePercent: advance.Percent,
+            UnappliedPaymentsAmount: advance.Unapplied);
+    }
+
+    /// <summary>
+    /// The advance on an order. The standard API does not expose prepayments, so this reads two
+    /// OData page web services: the order lines (prepayment invoiced and not yet deducted) and the
+    /// vendor ledger (payments not applied to any invoice). A figure is null when its service is
+    /// not configured or not published; the checks then tell Accounts to look by hand.
+    /// </summary>
+    private async Task<(decimal? Invoiced, decimal? Percent, decimal? Unapplied)> ReadAdvanceAsync(string orderNumber, string vendorNumber, string orderCurrency, CancellationToken ct)
+    {
+        var o = options.Value;
+        var lines = await GetPageServiceAsync<BcOrderLinePrepayment>(
+            o.PurchaseOrderLinesService,
+            Filter($"Document_No eq {Literal(orderNumber)}") + "&$select=Prepayment_Percent,Prepmt_Amt_Inv,Prepmt_Amt_Deducted",
+            ct).ConfigureAwait(false);
+        decimal? invoiced = lines is null ? null : decimal.Round(lines.Sum(l => Math.Max(0, l.PrepmtAmtInv - l.PrepmtAmtDeducted)), 2);
+        decimal? percent = lines is { Count: > 0 } ? lines.Max(l => l.PrepaymentPercent) : null;
+
+        var entries = await GetPageServiceAsync<BcVendorLedgerEntry>(
+            o.VendorLedgerEntriesService,
+            Filter($"Vendor_No eq {Literal(vendorNumber)} and Open eq true and Document_Type eq 'Payment'") + "&$select=Remaining_Amount,Currency_Code",
+            ct).ConfigureAwait(false);
+        decimal? unapplied = entries is null
+            ? null
+            : decimal.Round(
+                entries
+                    .Where(e => string.Equals(string.IsNullOrWhiteSpace(e.CurrencyCode) ? o.LocalCurrencyCode : e.CurrencyCode.Trim(), orderCurrency, StringComparison.OrdinalIgnoreCase))
+                    .Sum(e => Math.Max(0, e.RemainingAmount)),
+                2);
+
+        return (invoiced, percent, unapplied);
+    }
+
+    /// <summary>Null when the service is not configured, the company name is unknown, or Business Central does not have it (400 / 404).</summary>
+    private async Task<IReadOnlyList<T>?> GetPageServiceAsync<T>(string? service, string escapedFilter, CancellationToken ct)
+    {
+        var companyName = options.Value.CompanyName?.Trim();
+        if (string.IsNullOrWhiteSpace(service) || string.IsNullOrWhiteSpace(companyName))
+        {
+            return null;
+        }
+
+        // The client's base address ends in api/v2.0/; page web services live beside it under ODataV4/.
+        var url = $"../../ODataV4/Company({Uri.EscapeDataString(Literal(companyName))})/{Uri.EscapeDataString(service.Trim())}?$filter={escapedFilter}";
+        try
+        {
+            return await GetRawListAsync<T>(url, ct).ConfigureAwait(false);
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.NotFound or System.Net.HttpStatusCode.BadRequest)
+        {
+            logger.LogError("Business Central web service {Service} is not available ({StatusCode}); the advance on orders cannot be read.", service, (int)ex.StatusCode.Value);
+            return null;
+        }
     }
 
     public async Task<ErpPaymentStatus?> GetPaymentStatusAsync(string erpDocumentNumber, CancellationToken ct)
@@ -260,6 +320,27 @@ public sealed class BusinessCentralGateway(
         public decimal InvoicedQuantity { get; set; }
 
         public decimal AmountIncludingTax { get; set; }
+    }
+
+    private sealed class BcOrderLinePrepayment
+    {
+        [JsonPropertyName("Prepayment_Percent")]
+        public decimal PrepaymentPercent { get; set; }
+
+        [JsonPropertyName("Prepmt_Amt_Inv")]
+        public decimal PrepmtAmtInv { get; set; }
+
+        [JsonPropertyName("Prepmt_Amt_Deducted")]
+        public decimal PrepmtAmtDeducted { get; set; }
+    }
+
+    private sealed class BcVendorLedgerEntry
+    {
+        [JsonPropertyName("Remaining_Amount")]
+        public decimal RemainingAmount { get; set; }
+
+        [JsonPropertyName("Currency_Code")]
+        public string? CurrencyCode { get; set; }
     }
 
     private sealed class BcPurchaseInvoice
