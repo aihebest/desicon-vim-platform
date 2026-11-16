@@ -433,7 +433,7 @@ resource "azurerm_app_service_managed_certificate" "web" {
   count = local.web_custom_hostname == "" ? 0 : 1
 
   custom_hostname_binding_id = azurerm_app_service_custom_hostname_binding.web[0].id
-  tags                       = local.tags
+  tags                       = var.tags
 }
 
 resource "azurerm_app_service_certificate_binding" "web" {
@@ -460,7 +460,7 @@ resource "azurerm_app_service_managed_certificate" "portal" {
   count = local.portal_custom_hostname == "" ? 0 : 1
 
   custom_hostname_binding_id = azurerm_app_service_custom_hostname_binding.portal[0].id
-  tags                       = local.tags
+  tags                       = var.tags
 }
 
 resource "azurerm_app_service_certificate_binding" "portal" {
