@@ -68,6 +68,9 @@ public sealed class InvoiceCase
     /// <summary>When the goods were delivered or the service completed (from the waybill / WCC). Start of the 3-working-day target.</summary>
     public DateOnly? DeliveredOn { get; private set; }
 
+    /// <summary>Advance the submitter says was already paid on this order (null: none declared).</summary>
+    public decimal? DeclaredAdvance { get; private set; }
+
     // ---- Suggested by Document Intelligence ----
     public string? ExtractedJson { get; private set; }
 
@@ -471,6 +474,13 @@ public sealed class InvoiceCase
         var t = WorkflowRules.Resolve(CaseAction.Accept, Status, ctx.Actor);
         EnsureIndependentOfEarlierSteps(ctx.Actor, "accept it");
         EnsureNoBlockingFlags();
+        if (_flags.Any(f => f.IsOpen && f.Code == FlagCodes.AdvancePaid))
+        {
+            throw new DomainRuleException(
+                RuleCodes.BlockingFlagOpen,
+                "An advance was paid on this order. Clear the advance flag with a note of how it will be applied in Business Central before accepting, so the vendor is not paid twice.");
+        }
+
         EnsureCompleteAndClean();
         EnsureChecklistPassed(checklist, ChecklistStage.AccountsCheck, SupplyType, answers, "Accounts");
 
@@ -618,6 +628,7 @@ public sealed class InvoiceCase
         OrderNumber = s.OrderNumber.Trim().ToUpperInvariant();
         SupplyType = s.SupplyType;
         DeliveredOn = s.DeliveredOn;
+        DeclaredAdvance = s.DeclaredAdvance is > 0 ? s.DeclaredAdvance : null;
         SubmissionSubject = $"{VendorName}_{InvoiceNumber}_{OrderNumber}";
     }
 

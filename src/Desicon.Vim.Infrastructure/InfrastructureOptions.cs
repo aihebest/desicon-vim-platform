@@ -88,6 +88,18 @@ public sealed class BusinessCentralOptions
     /// </summary>
     public string LocalCurrencyCode { get; set; } = "NGN";
 
+    /// <summary>
+    /// OData web service (Business Central page 54, purchase order lines) the advance on an order is
+    /// read from: the standard API does not expose prepayments. Empty: the advance is not read.
+    /// </summary>
+    public string PurchaseOrderLinesService { get; set; } = "Purchase_Order_Line_Excel";
+
+    /// <summary>
+    /// OData web service (page 29, vendor ledger entries) the vendor's unapplied payments are read
+    /// from. Empty: they are not read.
+    /// </summary>
+    public string VendorLedgerEntriesService { get; set; } = "Vendor_Ledger_Entries_Excel";
+
     public bool UsesCli => string.Equals(AuthMode, "Cli", StringComparison.OrdinalIgnoreCase);
 
     public bool HasCompanyId => Guid.TryParse(CompanyId, out var id) && id != Guid.Empty;

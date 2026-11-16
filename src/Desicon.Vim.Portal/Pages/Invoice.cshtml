@@ -47,6 +47,10 @@
         <dt>Amount</dt><dd>@s.Currency @s.Amount?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)</dd>
         <dt>@(detail.SupplyType == SupplyType.Services ? "Service Order" : "Purchase Order")</dt><dd>@s.OrderNumber</dd>
         <dt>@(detail.SupplyType == SupplyType.Services ? "Work completed on" : "Delivered on")</dt><dd>@Fmt.Day(detail.DeliveredOn)</dd>
+        @if (detail.DeclaredAdvance is > 0)
+        {
+            <dt>Advance received (declared)</dt><dd>@s.Currency @detail.DeclaredAdvance.Value.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)</dd>
+        }
         <dt>Submitted</dt><dd>@Fmt.Wat(s.SubmittedAtUtc)@(detail.Round > 1 ? $" (corrected, round {detail.Round})" : "")</dd>
         <dt>Accepted</dt><dd>@(s.AcceptedAtUtc is { } a ? Fmt.Day(a) + ". Your credit period counts from this date." : "Not yet")</dd>
     </dl>

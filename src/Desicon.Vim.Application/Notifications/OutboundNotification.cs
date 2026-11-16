@@ -80,6 +80,14 @@ public static class NotificationTemplates
         $"<p>Invoice <strong>{E(c.Reference)}</strong> has passed the automatic checks (PO, posted receipt, full value, duplicates) and is waiting for your confirmatory check.</p>" +
         Summary(c) + $"<p>Due: {Due(c)}</p><p><a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
 
+    public static OutboundNotification AdvanceOnOrderNotice(InvoiceCase c, string to, string workbenchUrl) => new(
+        c.Id, nameof(AdvanceOnOrderNotice), NotificationChannel.Email, to,
+        $"For information: advance paid on {c.OrderNumber} — {c.Reference} — {c.VendorName}",
+        $"<p>Invoice <strong>{E(c.Reference)}</strong> is with Accounts, and an advance was paid on its order:</p><ul>" +
+        string.Concat(c.Flags.Where(f => f.IsOpen && f.Code == FlagCodes.AdvancePaid).Select(f => $"<li>{E(f.Description)}</li>")) + "</ul>" +
+        "<p>Accounts cannot accept it until they record how the advance will be applied.</p>" +
+        Summary(c) + $"<p>No action is needed. <a href=\"{E(workbenchUrl)}/cases/{c.Id}\">Open in the workbench</a></p>");
+
     public static OutboundNotification ExceptionForFinanceManager(InvoiceCase c, string to, string workbenchUrl) => new(
         c.Id, nameof(ExceptionForFinanceManager), NotificationChannel.Email, to,
         $"Decision needed: {c.Reference} — {c.VendorName} — {c.InvoiceNumber}",

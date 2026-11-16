@@ -24,7 +24,8 @@ public sealed record InvoiceSubmission(
     string Currency,
     string OrderNumber,
     SupplyType SupplyType,
-    DateOnly DeliveredOn)
+    DateOnly DeliveredOn,
+    decimal? DeclaredAdvance = null)
 {
     public IReadOnlyList<string> Problems(DateOnly today)
     {
@@ -72,6 +73,15 @@ public sealed record InvoiceSubmission(
         if (DeliveredOn == default || DeliveredOn > today)
         {
             p.Add("Delivery / completion date is required and cannot be in the future.");
+        }
+
+        if (DeclaredAdvance is < 0)
+        {
+            p.Add("The advance already received cannot be negative. Enter 0 if no advance was paid.");
+        }
+        else if (DeclaredAdvance > Amount && Amount > 0)
+        {
+            p.Add("The advance already received cannot be more than the invoice amount.");
         }
 
         return p;
@@ -244,6 +254,18 @@ public static class FlagCodes
     public const string SenderAuthenticationUnknown = "SENDER_AUTH_UNKNOWN";
     public const string BankDetailsUnverified = "BANK_DETAILS_UNVERIFIED";
     public const string ErpUnavailable = "ERP_UNAVAILABLE";
+
+    /// <summary>
+    /// An advance (prepayment) was paid on the order. Advisory, but Accounts cannot accept
+    /// the invoice until someone clears it with a note of how the advance will be applied.
+    /// </summary>
+    public const string AdvancePaid = "ADVANCE_PAID";
+
+    /// <summary>Business Central's advance figure could not be read, so Accounts must check the order by hand. Advisory.</summary>
+    public const string AdvanceUnknown = "ADVANCE_UNKNOWN";
+
+    /// <summary>The vendor declared more advance than Business Central shows. Blocking: the Finance Manager decides.</summary>
+    public const string AdvanceMismatch = "ADVANCE_MISMATCH";
 
     /// <summary>
     /// Rule: every BLOCKING flag can be cleared only by the Finance Manager, and

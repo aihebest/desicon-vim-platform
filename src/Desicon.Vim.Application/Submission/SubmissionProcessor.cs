@@ -134,6 +134,11 @@ public sealed class SubmissionProcessor(
             {
                 outbox.Enqueue(NotificationTemplates.ReadyForAccounts(c, o.AccountsPayableEmail, o.WorkbenchUrl));
             }
+
+            if (c.Flags.Any(f => f.IsOpen && f.Code == FlagCodes.AdvancePaid) && !string.IsNullOrWhiteSpace(o.FinanceManagerEmail))
+            {
+                outbox.Enqueue(NotificationTemplates.AdvanceOnOrderNotice(c, o.FinanceManagerEmail, o.WorkbenchUrl));
+            }
         }
 
         await unitOfWork.SaveChangesAsync(ct).ConfigureAwait(false);
@@ -162,5 +167,6 @@ public sealed class SubmissionProcessor(
         c.Currency ?? string.Empty,
         c.OrderNumber ?? string.Empty,
         c.SupplyType,
-        c.DeliveredOn ?? default);
+        c.DeliveredOn ?? default,
+        c.DeclaredAdvance);
 }
