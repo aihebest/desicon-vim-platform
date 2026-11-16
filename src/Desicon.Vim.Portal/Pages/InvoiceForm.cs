@@ -18,6 +18,9 @@ public sealed class InvoiceForm
 
     public DateOnly? DeliveredOn { get; set; }
 
+    /// <summary>Advance already received from Desicon on this order; 0 when none.</summary>
+    public decimal? AdvanceReceived { get; set; }
+
     public VendorInvoiceForm ToForm(SupplyType supply) => new(
         InvoiceNumber,
         InvoiceDate ?? default,
@@ -25,7 +28,8 @@ public sealed class InvoiceForm
         Currency,
         OrderNumber,
         supply,
-        DeliveredOn ?? default);
+        DeliveredOn ?? default,
+        AdvanceReceived);
 
     public static InvoiceForm From(VendorInvoiceDetail d)
     {
@@ -38,6 +42,7 @@ public sealed class InvoiceForm
             Currency = d.Summary.Currency ?? "NGN",
             OrderNumber = d.Summary.OrderNumber ?? string.Empty,
             DeliveredOn = d.DeliveredOn,
+            AdvanceReceived = d.DeclaredAdvance ?? 0,
         };
     }
 }

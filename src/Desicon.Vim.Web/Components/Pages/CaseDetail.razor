@@ -36,6 +36,11 @@
 @if (_case.Status == CaseStatus.ReturnedToVendor && _case.LastReason is not null) { <div class="alert alert-error">Returned to the vendor: @_case.LastReason</div> }
 @if (_case.AcceptedAtUtc is { } accepted) { <div class="alert alert-ok">Accepted @Format.Wat(accepted). The vendor's credit period counts from this date.</div> }
 
+@foreach (var advance in _case.Flags.Where(f => f.IsOpen && f.Code == FlagCodes.AdvancePaid))
+{
+    <div class="alert alert-error" role="alert"><strong>Advance paid on this order.</strong> @advance.Description Clear the flag below with a note of how the advance will be applied before accepting.</div>
+}
+
 @if (_case.Flags.Any(f => f.IsOpen))
 {
     <section class="panel panel-warn">
@@ -70,6 +75,7 @@
             <dt>Amount</dt><dd>@Format.Money(_case.Amount, _case.Currency)</dd>
             <dt>PO / SO</dt><dd>@(_case.OrderNumber ?? "—") @(_case.SupplyType != SupplyType.Unknown ? $"({_case.SupplyType})" : "")</dd>
             <dt>Delivered / completed</dt><dd>@(_case.DeliveredOn?.ToString("d MMM yyyy", CultureInfo.InvariantCulture) ?? "—")</dd>
+            @if (_case.DeclaredAdvance is { } declaredAdvance) { <dt>Advance declared</dt><dd>@Format.Money(declaredAdvance, _case.Currency)</dd> }
             <dt>Vendor email</dt><dd>@(_case.SenderEmail ?? "—")</dd>
             @if (_case.AcceptedAtUtc is { } acc) { <dt>Accepted (credit days from)</dt><dd>@Format.Wat(acc)</dd> }
             @if (_case.ErpDocumentNumber is not null) { <dt>BC document</dt><dd>@_case.ErpDocumentNumber</dd> }

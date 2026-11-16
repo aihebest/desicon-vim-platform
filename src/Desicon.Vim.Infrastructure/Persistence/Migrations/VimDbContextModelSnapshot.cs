@@ -297,6 +297,10 @@ namespace Desicon.Vim.Infrastructure.Persistence.Migrations
                         .HasColumnType("nchar(3)")
                         .IsFixedLength();
 
+                    b.Property<decimal?>("DeclaredAdvance")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<DateOnly?>("DeliveredOn")
                         .HasColumnType("date");
 

@@ -9,7 +9,9 @@
     <label>Currency<input name="Input.Currency" value="@Model.Input.Currency" maxlength="3" minlength="3" required /></label>
     <label>@(Model.Supply == SupplyType.Services ? "Service Order (SO) number" : "Purchase Order (PO) number")<input name="Input.OrderNumber" value="@Model.Input.OrderNumber" maxlength="40" required autocomplete="off" /></label>
     <label>@(Model.Supply == SupplyType.Services ? "Work completed on" : "Delivered on")<input name="Input.DeliveredOn" type="date" value="@Fmt.Iso(Model.Input.DeliveredOn)" required /></label>
+    <label>Advance already received on this order (enter 0 if none)<input name="Input.AdvanceReceived" type="number" step="0.01" min="0" value="@Fmt.Money(Model.Input.AdvanceReceived ?? 0)" required inputmode="decimal" /></label>
 </div>
+<p class="muted">Invoice the full value of what was delivered. If Desicon paid you an advance on this order, enter the amount received so it is deducted from the payment.</p>
 
 <h3>Documents <span class="muted">(PDF only, up to @Model.MaxMegabytes MB each)</span></h3>
 @if (!Model.RequireAll)

@@ -237,6 +237,71 @@ public class SubmissionWorkflowTests
     }
 
     [Fact]
+    public async Task An_advance_in_business_central_must_be_acknowledged_before_accounts_can_accept()
+    {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = 300_000m, AdvancePercent = 30m };
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
+        var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
+        Assert.False(flag.Blocking);
+        Assert.Contains("NGN 300,000.00 (30%)", flag.Description);
+        Assert.Contains("Balance payable: NGN 700,000.00", flag.Description);
+        Assert.Single(_store.Sent, n => n.Template == "AdvanceOnOrderNotice");
+
+        var refused = await Assert.ThrowsAsync<DomainRuleException>(() => Workflow().AcceptAsync(c.Id, AllYes(), Ap2, default));
+        Assert.Contains("advance", refused.Message, StringComparison.OrdinalIgnoreCase);
+
+        await Workflow().ResolveFlagAsync(c.Id, flag.Id, "Prepayment invoice applied in BC; balance only to be paid.", Ap2, default);
+        await Workflow().AcceptAsync(c.Id, AllYes(), Ap2, default);
+        Assert.Equal(CaseStatus.Accepted, c.Status);
+    }
+
+    [Fact]
+    public async Task A_full_advance_says_no_further_payment_is_due()
+    {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = 1_000_000m, AdvancePercent = 100m };
+        var c = await SubmitAndScanAsync();
+        await Processor().RunAsync(default);
+
+        var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
+        Assert.Contains("FULLY PAID IN ADVANCE", flag.Description);
+    }
+
+    [Fact]
+    public async Task A_declared_advance_that_differs_from_business_central_goes_to_the_finance_manager()
+    {
+        _erp.Order = _erp.Order with { AdvanceInvoicedAmount = 300_000m, AdvancePercent = 30m };
+        var c = await SubmitAndScanAsync(Submission() with { DeclaredAdvance = 1_000_000m });
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.ExceptionReview, c.Status);
+        Assert.Contains(c.Flags, f => f.Code == FlagCodes.AdvanceMismatch && f.Blocking);
+        Assert.Contains(c.Flags, f => f.Code == FlagCodes.AdvancePaid && !f.Blocking);
+    }
+
+    [Fact]
+    public async Task A_declared_advance_is_flagged_even_when_business_central_gives_no_figure()
+    {
+        var c = await SubmitAndScanAsync(Submission() with { DeclaredAdvance = 400_000m });
+        await Processor().RunAsync(default);
+
+        Assert.Equal(CaseStatus.WithAccountsPayable, c.Status);
+        Assert.Equal(400_000m, c.DeclaredAdvance);
+        var flag = Assert.Single(c.Flags, f => f.Code == FlagCodes.AdvancePaid);
+        Assert.Contains("The vendor declared an advance of NGN 400,000.00", flag.Description);
+        Assert.DoesNotContain(c.Flags, f => f.Code == FlagCodes.AdvanceMismatch);
+    }
+
+    [Fact]
+    public async Task An_advance_larger_than_the_invoice_is_refused_at_the_door()
+    {
+        var problems = await Submissions().PrecheckAsync(Submission() with { DeclaredAdvance = 2_000_000m }, AllSlots(), null, null, default);
+        Assert.Contains(problems, p => p.Contains("cannot be more than the invoice amount", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task A_rejection_lists_the_checklist_items_marked_no_and_tells_the_finance_manager()
     {
         var c = await SubmitAndScanAsync();

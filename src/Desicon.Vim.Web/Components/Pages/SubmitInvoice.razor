@@ -36,6 +36,7 @@ else
         <label>Invoice no.<input @bind="_f.InvoiceNumber" /></label>
         <label>Invoice date<input type="date" @bind="_f.InvoiceDate" /></label>
         <label>Delivery / completion date<input type="date" @bind="_f.DeliveredOn" /></label>
+        <label>Advance already paid on this order (0 if none)<input type="number" step="0.01" min="0" @bind="_f.DeclaredAdvance" /></label>
         <label>PO / SO no.<input @bind="_f.OrderNumber" @bind:after="LookupOrderAsync" /></label>
         <label>Supply type
             <select @bind="_f.SupplyType">
@@ -94,6 +95,7 @@ else
         public string? InvoiceNumber { get; set; }
         public DateOnly? InvoiceDate { get; set; }
         public DateOnly? DeliveredOn { get; set; }
+        public decimal? DeclaredAdvance { get; set; }
         public string? OrderNumber { get; set; }
         public SupplyType SupplyType { get; set; }
         public string Currency { get; set; } = "NGN";
@@ -119,6 +121,7 @@ else
             _f.InvoiceNumber = c.InvoiceNumber;
             _f.InvoiceDate = c.InvoiceDate;
             _f.DeliveredOn = c.DeliveredOn;
+            _f.DeclaredAdvance = c.DeclaredAdvance;
             _f.OrderNumber = c.OrderNumber;
             _f.SupplyType = c.SupplyType;
             _f.Currency = c.Currency ?? "NGN";
@@ -181,7 +184,7 @@ else
     private InvoiceSubmission ToSubmission() => new(
         _f.VendorNo ?? string.Empty, _f.VendorName ?? string.Empty, _f.VendorEmail,
         _f.InvoiceNumber ?? string.Empty, _f.InvoiceDate ?? default, _f.Amount ?? 0, _f.Currency,
-        _f.OrderNumber ?? string.Empty, _f.SupplyType, _f.DeliveredOn ?? default);
+        _f.OrderNumber ?? string.Empty, _f.SupplyType, _f.DeliveredOn ?? default, _f.DeclaredAdvance);
 
     private IReadOnlyList<SubmittedFile> ToFiles() => _files
         .Where(kv => RequiredDocuments.For(_f.SupplyType).Concat(RequiredDocuments.Optional(_f.SupplyType)).Contains(kv.Key))

@@ -15,7 +15,8 @@ public sealed record VendorInvoiceForm(
     string Currency,
     string OrderNumber,
     SupplyType SupplyType,
-    DateOnly DeliveredOn);
+    DateOnly DeliveredOn,
+    decimal? AdvanceReceived = null);
 
 /// <summary>One row of the vendor's invoice list.</summary>
 public sealed record VendorInvoiceSummary(
@@ -42,7 +43,8 @@ public sealed record VendorInvoiceDetail(
     int Round,
     string? ReturnReason,
     IReadOnlyList<VendorDocumentView> Documents,
-    bool CanResubmit);
+    bool CanResubmit,
+    decimal? DeclaredAdvance = null);
 
 /// <summary>Either the problems to fix, or the case that was created/updated.</summary>
 public sealed record VendorSubmitResult(IReadOnlyList<string> Problems, Guid? CaseId, string? Reference)
@@ -89,7 +91,8 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
             c.SubmissionRound,
             c.Status == CaseStatus.ReturnedToVendor ? c.LastReason : null,
             docs,
-            CanResubmitOnPortal(c));
+            CanResubmitOnPortal(c),
+            c.DeclaredAdvance);
     }
 
     public async Task<VendorSubmitResult> SubmitAsync(VendorUser user, VendorInvoiceForm form, IReadOnlyList<SubmittedFile> files, CancellationToken ct)
@@ -204,7 +207,8 @@ public sealed class VendorPortalService(ICaseRepository cases, SubmissionService
             (form.Currency ?? string.Empty).Trim().ToUpperInvariant(),
             form.OrderNumber?.Trim() ?? string.Empty,
             form.SupplyType,
-            form.DeliveredOn);
+            form.DeliveredOn,
+            form.AdvanceReceived);
     }
 
     /// <summary>

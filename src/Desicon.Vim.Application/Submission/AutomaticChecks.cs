@@ -57,12 +57,13 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
         ArgumentNullException.ThrowIfNull(s);
         var rejections = new List<string>();
         var flags = new List<CheckFlag>();
+        ErpOrderCheck? order = null;
 
         if (erp.IsEnabled)
         {
             try
             {
-                await CheckErpAsync(caseId, s, rejections, ct).ConfigureAwait(false);
+                order = await CheckErpAsync(caseId, s, rejections, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (ex is not OperationCanceledException and not ErpUnavailableException)
             {
@@ -77,11 +78,65 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
                 Blocking: true));
         }
 
+        AddAdvanceFlags(s, order, flags);
         await CheckDuplicatesAsync(caseId, reference, s, rejections, flags, ct).ConfigureAwait(false);
         return new CheckOutcome(rejections, flags);
     }
 
-    private async Task CheckErpAsync(Guid caseId, InvoiceSubmission s, List<string> rejections, CancellationToken ct)
+    /// <summary>
+    /// Advance (prepayment) control: when Business Central shows an advance on the order, or the
+    /// submitter declared one, Accounts must see it and acknowledge it before accepting, so the
+    /// vendor is not paid twice. If the two figures disagree, the Finance Manager decides first.
+    /// </summary>
+    private void AddAdvanceFlags(InvoiceSubmission s, ErpOrderCheck? order, List<CheckFlag> flags)
+    {
+        var declared = s.DeclaredAdvance is > 0 ? s.DeclaredAdvance : null;
+        var inBc = order?.AdvanceInvoicedAmount;
+        if (declared is null && inBc is not > 0)
+        {
+            return;
+        }
+
+        var inv = CultureInfo.InvariantCulture;
+        var currency = s.Currency.Trim().ToUpperInvariant();
+        var orderNo = s.OrderNumber.Trim().ToUpperInvariant();
+        var tolerance = options.Value.FullValueTolerance;
+        var paid = inBc is > 0 ? inBc.Value : declared!.Value;
+        var balance = Math.Max(0, s.Amount - paid);
+
+        string source;
+        if (inBc is > 0)
+        {
+            var percent = order!.AdvancePercent is > 0 ? string.Create(inv, $" ({order.AdvancePercent.Value:0.##}%)") : string.Empty;
+            source = string.Create(inv, $"Business Central shows an advance of {currency} {inBc.Value:N2}{percent} on {orderNo}.");
+        }
+        else
+        {
+            source = string.Create(inv, $"The vendor declared an advance of {currency} {paid:N2} already received on {orderNo}.");
+            if (inBc is null)
+            {
+                source += " Business Central's prepayment figure was not available, so check the order's Prepayment section and the vendor's payments.";
+            }
+        }
+
+        var due = balance <= tolerance
+            ? " This invoice is FULLY PAID IN ADVANCE: no further payment is due."
+            : string.Create(inv, $" Balance payable: {currency} {balance:N2}.");
+        flags.Add(new CheckFlag(
+            FlagCodes.AdvancePaid,
+            source + due + " Apply the advance when booking the invoice in Business Central; do not pay the full invoice amount.",
+            Blocking: false));
+
+        if (inBc is not null && declared is not null && Math.Abs(declared.Value - inBc.Value) > tolerance)
+        {
+            flags.Add(new CheckFlag(
+                FlagCodes.AdvanceMismatch,
+                string.Create(inv, $"The vendor declared an advance of {currency} {declared.Value:N2} on {orderNo}, but Business Central shows {currency} {inBc.Value:N2}. Confirm what was actually paid, including any payment made outside the order's prepayment, before this goes to Accounts."),
+                Blocking: true));
+        }
+    }
+
+    private async Task<ErpOrderCheck?> CheckErpAsync(Guid caseId, InvoiceSubmission s, List<string> rejections, CancellationToken ct)
     {
         var vendorNo = s.VendorNo.Trim().ToUpperInvariant();
         var orderNo = s.OrderNumber.Trim().ToUpperInvariant();
@@ -91,26 +146,26 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
         if (vendor is null)
         {
             rejections.Add($"Vendor number {vendorNo} is not registered with Desicon. Please contact Procurement.");
-            return;
+            return null;
         }
 
         if (vendor.Blocked)
         {
             rejections.Add($"Vendor account {vendorNo} is on hold. Please contact Procurement before invoicing.");
-            return;
+            return null;
         }
 
         var order = await erp.CheckOrderAsync(vendorNo, orderNo, ct).ConfigureAwait(false);
         if (!order.OrderFound)
         {
             rejections.Add($"PO / SO {orderNo} was not found, or it has already been fully invoiced.");
-            return;
+            return null;
         }
 
         if (!order.BelongsToVendor)
         {
             rejections.Add($"PO / SO {orderNo} is not issued to vendor {vendorNo}.");
-            return;
+            return null;
         }
 
         if (!order.IsOpen)
@@ -128,7 +183,7 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
         {
             rejections.Add($"No delivery has been confirmed against {orderNo} yet (no GRV / TRV posted, or everything received is already invoiced). " +
                            "The department must confirm delivery before the invoice can be submitted.");
-            return;
+            return null;
         }
 
         // Other VIM cases on this order that BC does not show as invoiced yet claim part of the received value.
@@ -139,7 +194,7 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
         {
             rejections.Add($"The value received on {orderNo} is already being invoiced under {string.Join(", ", claims.Select(c => c.Reference))}. " +
                            "Wait for the department to confirm the next delivery before invoicing again.");
-            return;
+            return null;
         }
 
         if (Math.Abs(s.Amount - available) > tolerance)
@@ -148,6 +203,8 @@ public sealed class AutomaticChecks(ICaseRepository cases, IErpGateway erp, IOpt
                 CultureInfo.InvariantCulture,
                 $"The invoice amount ({currency} {s.Amount:N2}) does not equal the value received and not yet invoiced on {orderNo} ({currency} {available:N2}, VAT included). Desicon accepts invoices for the full received value only."));
         }
+
+        return order;
     }
 
     private async Task CheckDuplicatesAsync(Guid caseId, string reference, InvoiceSubmission s, List<string> rejections, List<CheckFlag> flags, CancellationToken ct)

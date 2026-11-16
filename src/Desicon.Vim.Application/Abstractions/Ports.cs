@@ -122,6 +122,8 @@ public interface IInvoiceExtractor
 public sealed record ErpVendor(string VendorNo, string Name, bool Blocked, IReadOnlyList<string> Emails, IReadOnlyList<string> BankAccountNumbers);
 
 /// <param name="RemainingAmount">Ordered but not yet invoiced, including VAT.</param>
+/// <param name="AdvanceInvoicedAmount">Advance (prepayment) already invoiced on the order and not yet deducted, including VAT. Null: Business Central gave no figure.</param>
+/// <param name="AdvancePercent">The order's prepayment percentage, when known.</param>
 /// <param name="ReceivedNotInvoicedAmount">Received (GRV / TRV posted) but not yet invoiced, including VAT: what a full-value invoice must equal.</param>
 public sealed record ErpOrderCheck(
     bool OrderFound,
@@ -130,7 +132,9 @@ public sealed record ErpOrderCheck(
     bool HasPostedReceipt,
     decimal? RemainingAmount,
     string? Currency,
-    decimal? ReceivedNotInvoicedAmount = null);
+    decimal? ReceivedNotInvoicedAmount = null,
+    decimal? AdvanceInvoicedAmount = null,
+    decimal? AdvancePercent = null);
 
 public sealed record ErpPaymentStatus(bool Paid, string? PaymentReference, DateOnly? PaidOn);
 
