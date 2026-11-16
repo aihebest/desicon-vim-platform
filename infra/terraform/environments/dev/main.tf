@@ -286,6 +286,9 @@ module "app_hosting" {
     client_id = var.portal_client_id
   }
 
+  web_custom_hostname    = var.workbench_hostname
+  portal_custom_hostname = var.portal_hostname
+
   log_analytics_workspace_id = module.monitoring.log_analytics_workspace_id
   tags                       = local.tags
 }

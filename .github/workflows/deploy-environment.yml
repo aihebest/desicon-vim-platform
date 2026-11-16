@@ -92,6 +92,8 @@ jobs:
       TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
       TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
       TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
+      TF_VAR_workbench_hostname: ${{ vars.WORKBENCH_HOSTNAME }}
+      TF_VAR_portal_hostname: ${{ vars.PORTAL_HOSTNAME }}
       # Who receives notices: Finance Manager (flagged invoices, call-back invitations,
       # escalations), Accounts Payable (reminders) and management (second escalation).
       TF_VAR_vim_settings: >-
@@ -227,6 +229,8 @@ jobs:
       TF_VAR_vendor_portal_enabled: ${{ vars.VENDOR_PORTAL_ENABLED == 'true' }}
       TF_VAR_externalid_subdomain: ${{ vars.EXTERNALID_SUBDOMAIN }}
       TF_VAR_portal_client_id: ${{ vars.PORTAL_CLIENT_ID }}
+      TF_VAR_workbench_hostname: ${{ vars.WORKBENCH_HOSTNAME }}
+      TF_VAR_portal_hostname: ${{ vars.PORTAL_HOSTNAME }}
       # Who receives notices: Finance Manager (flagged invoices, call-back invitations,
       # escalations), Accounts Payable (reminders) and management (second escalation).
       TF_VAR_vim_settings: >-
