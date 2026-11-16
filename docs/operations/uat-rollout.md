@@ -216,7 +216,15 @@ Differences from UAT:
 - **Business Central:** environment **Production** (`BC_ENVIRONMENT = Production`), a BC connector `(prod)` with **D365 READ** in the production company. The platform only reads; it never posts or pays.
 - **Deploy:** choose **Last environment = prod**. Dev and UAT deploy first, so every prod release has passed through UAT.
 - **Protect the environment** (GitHub → Settings → Environments → `prod`): **Required reviewers** (you), deployment branch `main` only.
-- **Delete lock**, after the first apply: `az lock create --name vim-prod-no-delete --resource-group rg-vim-prod-weu --lock-type CanNotDelete`
+- **Delete locks**, after the first apply, on the three resources that hold data. Do **not** lock the whole resource group: every deploy opens and then deletes a temporary SQL firewall rule, and a group-level lock blocks that delete and fails the deploy.
+
+  ```powershell
+  $rg = "rg-vim-prod-weu"
+  $db = az sql db show -g $rg -s "<sql server>" -n VimDb --query id -o tsv
+  az lock create --name vim-prod-no-delete --lock-type CanNotDelete --resource $db
+  az lock create --name vim-prod-no-delete --lock-type CanNotDelete -g $rg --resource-type Microsoft.Storage/storageAccounts --resource-name "<documents storage account>"
+  az lock create --name vim-prod-no-delete --lock-type CanNotDelete -g $rg --resource-type Microsoft.KeyVault/vaults --resource-name "<key vault>"
+  ```
 - **Retention:** prod keeps 35-day database backups with 7-year long-term retention and 90 days of logs; confirm with Finance.
 - **Roles:** assign the real Finance and Procurement staff under *Desicon VIM Workbench (prod)*. Procurement must never also hold Accounts Payable.
 - **Cut-over:** invite vendors in waves (pilot, then Wave 1 = vendors with open POs, then Wave 2) with about 4 weeks of overlap; then switch email intake off for good.
