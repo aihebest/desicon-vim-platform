@@ -220,7 +220,8 @@ Differences from UAT:
 
   ```powershell
   $rg = "rg-vim-prod-weu"
-  az lock create --name vim-prod-no-delete --lock-type CanNotDelete -g $rg --resource-type Microsoft.Sql/servers/databases --resource-name "<sql server>/VimDb"
+  $db = az sql db show -g $rg -s "<sql server>" -n VimDb --query id -o tsv
+  az lock create --name vim-prod-no-delete --lock-type CanNotDelete --resource $db
   az lock create --name vim-prod-no-delete --lock-type CanNotDelete -g $rg --resource-type Microsoft.Storage/storageAccounts --resource-name "<documents storage account>"
   az lock create --name vim-prod-no-delete --lock-type CanNotDelete -g $rg --resource-type Microsoft.KeyVault/vaults --resource-name "<key vault>"
   ```
