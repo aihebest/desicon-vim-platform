@@ -189,3 +189,25 @@ variable "vendor_portal" {
     error_message = "When the vendor portal is enabled, set app_name, authority (https://<subdomain>.ciamlogin.com/) and client_id (a GUID)."
   }
 }
+
+variable "web_custom_hostname" {
+  description = "Short address for the workbench, e.g. vim.desiconapp.com. Empty: only the azurewebsites.net address. Its CNAME and asuid TXT records must exist first."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.web_custom_hostname == "" || can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", lower(trimspace(var.web_custom_hostname))))
+    error_message = "web_custom_hostname must be a host name only (no https://, no path), e.g. vim.desiconapp.com."
+  }
+}
+
+variable "portal_custom_hostname" {
+  description = "Short address for the vendor portal, e.g. vendors.desicongroup.com. Empty: only the azurewebsites.net address. Its CNAME and asuid TXT records must exist first."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.portal_custom_hostname == "" || can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", lower(trimspace(var.portal_custom_hostname))))
+    error_message = "portal_custom_hostname must be a host name only (no https://, no path), e.g. vendors.desicongroup.com."
+  }
+}

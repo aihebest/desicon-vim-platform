@@ -319,3 +319,15 @@ variable "portal_client_id" {
   type        = string
   default     = ""
 }
+
+variable "workbench_hostname" {
+  description = "Short address for the workbench, e.g. vim.desiconapp.com (GitHub variable WORKBENCH_HOSTNAME). Empty: none. Add its DNS records first (docs/operations/custom-domains.md)."
+  type        = string
+  default     = ""
+}
+
+variable "portal_hostname" {
+  description = "Short address for the vendor portal, e.g. vendors.desicongroup.com (GitHub variable PORTAL_HOSTNAME). Empty: none. Add its DNS records first."
+  type        = string
+  default     = ""
+}

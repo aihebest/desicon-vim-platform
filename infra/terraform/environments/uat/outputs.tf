@@ -82,3 +82,13 @@ output "public_data_endpoints_accepted" {
   description = "True when prod deliberately runs data services on public endpoints (ADR 0003)."
   value       = var.accept_public_data_endpoints
 }
+
+output "web_public_url" {
+  description = "Address staff should use (custom domain when set)."
+  value       = module.app_hosting.web_public_url
+}
+
+output "portal_public_url" {
+  description = "Address vendors should use (custom domain when set); empty when the portal is off."
+  value       = module.app_hosting.portal_public_url
+}

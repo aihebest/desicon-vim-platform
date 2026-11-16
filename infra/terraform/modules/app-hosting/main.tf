@@ -39,7 +39,14 @@ terraform {
 }
 
 locals {
-  portal_url = var.vendor_portal.enabled ? "https://${var.vendor_portal.app_name}.azurewebsites.net" : ""
+  # Short addresses (custom domains) replace the long azurewebsites.net ones in emails
+  # and invitation links when set. The long addresses keep working either way.
+  web_custom_hostname    = lower(trimspace(var.web_custom_hostname))
+  portal_custom_hostname = var.vendor_portal.enabled ? lower(trimspace(var.portal_custom_hostname)) : ""
+
+  portal_url = !var.vendor_portal.enabled ? "" : (
+    local.portal_custom_hostname != "" ? "https://${local.portal_custom_hostname}" : "https://${var.vendor_portal.app_name}.azurewebsites.net"
+  )
 
   # Business Central checks switch on once the connector's client ID is set
   # (GitHub variable BC_CLIENT_ID), or when vim_settings forces them on.
@@ -58,7 +65,7 @@ locals {
     "BusinessCentral__CompanyName"   = var.business_central.company_name
     "BusinessCentral__AuthMode"      = "Federated"
     "BusinessCentral__Enabled"       = tostring(var.vim_settings.business_central_enabled || trimspace(var.business_central.client_id) != "")
-    "Vim__WorkbenchUrl"              = coalesce(var.vim_settings.workbench_url, "https://${var.web_app_name}.azurewebsites.net")
+    "Vim__WorkbenchUrl"              = coalesce(var.vim_settings.workbench_url, local.web_custom_hostname == "" ? "" : "https://${local.web_custom_hostname}", "https://${var.web_app_name}.azurewebsites.net")
     "Vim__FinanceManagerEmail"       = var.vim_settings.finance_manager_email
     "Vim__AccountsPayableEmail"      = var.vim_settings.accounts_payable_email
     "Vim__ManagementEscalationEmail" = var.vim_settings.management_escalation_email
@@ -402,4 +409,64 @@ resource "azurerm_monitor_diagnostic_setting" "host_storage" {
   enabled_metric {
     category = "Transaction"
   }
+}
+
+# -- Custom domains (optional) ---------------------------------------------------------
+# Each needs two DNS records to exist BEFORE the apply (docs/operations/custom-domains.md):
+#   CNAME <host>        -> <app name>.azurewebsites.net   (DNS only, not proxied)
+#   TXT   asuid.<host>  -> the app's custom domain verification ID
+# The certificate is App Service's free managed certificate; Azure renews it.
+resource "azurerm_app_service_custom_hostname_binding" "web" {
+  count = local.web_custom_hostname == "" ? 0 : 1
+
+  hostname            = local.web_custom_hostname
+  app_service_name    = azurerm_linux_web_app.web.name
+  resource_group_name = var.resource_group_name
+
+  # The certificate binding below sets these.
+  lifecycle {
+    ignore_changes = [ssl_state, thumbprint]
+  }
+}
+
+resource "azurerm_app_service_managed_certificate" "web" {
+  count = local.web_custom_hostname == "" ? 0 : 1
+
+  custom_hostname_binding_id = azurerm_app_service_custom_hostname_binding.web[0].id
+  tags                       = local.tags
+}
+
+resource "azurerm_app_service_certificate_binding" "web" {
+  count = local.web_custom_hostname == "" ? 0 : 1
+
+  hostname_binding_id = azurerm_app_service_custom_hostname_binding.web[0].id
+  certificate_id      = azurerm_app_service_managed_certificate.web[0].id
+  ssl_state           = "SniEnabled"
+}
+
+resource "azurerm_app_service_custom_hostname_binding" "portal" {
+  count = local.portal_custom_hostname == "" ? 0 : 1
+
+  hostname            = local.portal_custom_hostname
+  app_service_name    = azurerm_linux_web_app.portal[0].name
+  resource_group_name = var.resource_group_name
+
+  lifecycle {
+    ignore_changes = [ssl_state, thumbprint]
+  }
+}
+
+resource "azurerm_app_service_managed_certificate" "portal" {
+  count = local.portal_custom_hostname == "" ? 0 : 1
+
+  custom_hostname_binding_id = azurerm_app_service_custom_hostname_binding.portal[0].id
+  tags                       = local.tags
+}
+
+resource "azurerm_app_service_certificate_binding" "portal" {
+  count = local.portal_custom_hostname == "" ? 0 : 1
+
+  hostname_binding_id = azurerm_app_service_custom_hostname_binding.portal[0].id
+  certificate_id      = azurerm_app_service_managed_certificate.portal[0].id
+  ssl_state           = "SniEnabled"
 }

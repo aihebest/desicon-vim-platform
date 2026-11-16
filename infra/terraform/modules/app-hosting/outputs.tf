@@ -62,3 +62,13 @@ output "portal_principal_id" {
   description = "Object ID of the vendor portal's managed identity, or null when the portal is off."
   value       = one(azurerm_linux_web_app.portal[*].identity[0].principal_id)
 }
+
+output "web_public_url" {
+  description = "Address staff should use: the custom domain when set, otherwise the default one."
+  value       = local.web_custom_hostname != "" ? "https://${local.web_custom_hostname}" : "https://${azurerm_linux_web_app.web.default_hostname}"
+}
+
+output "portal_public_url" {
+  description = "Address vendors should use (custom domain when set); empty when the portal is off."
+  value       = local.portal_url
+}

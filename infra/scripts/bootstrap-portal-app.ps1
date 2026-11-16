@@ -25,7 +25,8 @@
 param(
     [Parameter(Mandatory)] [ValidateSet('dev', 'uat', 'prod')] [string] $Environment,
     # Leave out on the first run (the app does not exist yet); re-run with it after the deploy.
-    [string] $PortalUrl
+    # More than one is allowed, e.g. the azurewebsites.net address and a custom domain.
+    [string[]] $PortalUrl = @()
 )
 
 $ErrorActionPreference = 'Stop'
@@ -57,10 +58,13 @@ if (-not $appId) {
 Remove-Item $claimsFile -ErrorAction SilentlyContinue
 
 # -- 2. Redirect URIs (exact match only) -----------------------------------------------
-if ($PortalUrl) {
-    $base = $PortalUrl.TrimEnd('/')
-    if ($base -notlike 'https://*') { throw "PortalUrl must start with https://" }
-    $uris = @("$base/signin-oidc", "$base/signout-callback-oidc")
+if ($PortalUrl.Count -gt 0) {
+    $uris = @()
+    foreach ($url in $PortalUrl) {
+        $base = $url.TrimEnd('/')
+        if ($base -notlike 'https://*') { throw "PortalUrl must start with https://" }
+        $uris += "$base/signin-oidc", "$base/signout-callback-oidc"
+    }
     Write-Host "Setting redirect URIs: $($uris -join ', ')"
     az ad app update --id $appId --web-redirect-uris @uris | Out-Null
 } else {
