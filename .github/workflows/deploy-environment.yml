@@ -463,6 +463,16 @@ jobs:
 
       # If the app did not come up, pull its container log and surface the error
       # lines as annotations, so the cause is visible on the run's summary page.
+      # The sign-in token lasts only a few minutes and the uploads take longer, so sign in
+      # again or the log download below fails and the reason for the failure is lost.
+      - name: Azure login (to read the app log)
+        if: ${{ failure() && !inputs.infra_only }}
+        uses: azure/login@v3
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
       - name: Show web app startup errors
         if: ${{ failure() && !inputs.infra_only }}
         run: |
