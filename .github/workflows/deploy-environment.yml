@@ -427,6 +427,18 @@ jobs:
       # /health is anonymous and checks the database connection, so a pass
       # means: app started, managed identity works, SQL user exists, schema is
       # migrated.
+      # The new package is swapped in under the running app. On the small plans the old
+      # process is sometimes not recycled promptly and answers with load errors
+      # (BadImageFormatException, CultureNotFoundException) until it is restarted, which
+      # left dev unresponsive for hours. Restart explicitly before the health checks.
+      - name: Restart the web apps on the new package
+        if: ${{ !inputs.infra_only }}
+        run: |
+          rg="${{ steps.tfout.outputs.resource_group }}"
+          az webapp restart -g "$rg" -n "${{ steps.tfout.outputs.web_app_name }}"
+          portal="${{ steps.tfout.outputs.portal_app_name }}"
+          if [ -n "$portal" ]; then az webapp restart -g "$rg" -n "$portal"; fi
+
       - name: Smoke test GET /health
         if: ${{ !inputs.infra_only }}
         run: |
