@@ -11,7 +11,7 @@ Production launches at a small size and is scaled up when usage justifies it:
 | | Lean start (now) | Full specification (later) |
 |---|---|---|
 | App Service plan | 1 × Basic **B2** (workbench, vendor portal, functions) | 2 × Premium P1v3 |
-| Database | Serverless `GP_S_Gen5_1`, auto-pause off | Provisioned `GP_Gen5_2` |
+| Database | Standard `S1` (from 21 Nov 2026; serverless `GP_S_Gen5_1` with auto-pause off cost about EUR 235 a month) | Provisioned `GP_Gen5_2` |
 | Network | **Public endpoints**, Entra-only sign-in | Private endpoints in a VNet |
 | Deployments | GitHub-hosted runners | Self-hosted runner inside the VNet |
 

@@ -155,16 +155,20 @@ variable "app_service_zone_balancing_enabled" {
 }
 
 # -- Sizing: SQL ------------------------------------------------------------------------
+# S1 (Standard, 20 DTU) costs a fixed monthly amount of roughly a tenth of the serverless
+# tier left running: serverless with auto-pause off billed about EUR 235 a month, and the
+# functions' timers query the database every minute, so it would never pause anyway.
+# If the workbench feels slow, move up one step at a time: S2, S3, then GP_S_Gen5_1.
 variable "sql_sku_name" {
-  description = "Database SKU. GP_S_Gen5_* = serverless (auto-pause); GP_Gen5_* = provisioned."
+  description = "Database SKU. S0-S3 = Standard (fixed price); GP_S_Gen5_* = serverless (auto-pause); GP_Gen5_* = provisioned."
   type        = string
-  default     = "GP_S_Gen5_1"
+  default     = "S1"
 }
 
 variable "sql_max_size_gb" {
-  description = "Maximum database size in GB."
+  description = "Maximum database size in GB. Standard tiers accept only fixed steps (..., 20, 30, 40, 50, 100, 150, 200, 250)."
   type        = number
-  default     = 32
+  default     = 50
 }
 
 variable "sql_auto_pause_delay_in_minutes" {
