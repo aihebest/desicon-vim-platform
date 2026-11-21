@@ -166,9 +166,9 @@ variable "sql_sku_name" {
 }
 
 variable "sql_max_size_gb" {
-  description = "Maximum database size in GB."
+  description = "Maximum database size in GB. Standard tiers accept only fixed steps (..., 20, 30, 40, 50, 100, 150, 200, 250)."
   type        = number
-  default     = 32
+  default     = 50
 }
 
 variable "sql_auto_pause_delay_in_minutes" {
