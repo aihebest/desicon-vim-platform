@@ -341,8 +341,14 @@ jobs:
 
       # "Active Directory Default" makes SqlClient use DefaultAzureCredential,
       # which picks up the Azure CLI sign-in from the step above.
+      # AZURE_TOKEN_CREDENTIALS limits it to that sign-in. Without it the chain first
+      # probes for a managed identity; GitHub's runners began answering that probe with
+      # "Unauthorized" (Nov 2026), which Azure.Identity treats as a hard failure instead
+      # of moving on to the CLI sign-in.
       - name: Apply EF Core migrations
         if: ${{ !inputs.infra_only }}
+        env:
+          AZURE_TOKEN_CREDENTIALS: AzureCliCredential
         run: |
           chmod +x efbundle/efbundle
           ./efbundle/efbundle --connection \
